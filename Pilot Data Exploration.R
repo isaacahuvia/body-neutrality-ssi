@@ -5,9 +5,14 @@
 
 ####  Startup  ####
 ## Load packages
+if(!require(qualtRics)){install.packages('qualtRics')}
 library(qualtRics)
+if(!require(tidyverse)){install.packages('tidyverse')}
 library(tidyverse)
-library(effsize)
+if(!require(MBESS)){install.packages('MBESS')}
+library(MBESS)
+if(!require(MOTE)){install.packages('MOTE')}
+library(MOTE)
 
 ## Download Pilot Data
 # To pull a fresh dataset from Qualtrics, set this to TRUE
@@ -70,8 +75,7 @@ ssi_completers <- eligible_responders %>%
 
 #Identify Program Feedback Scale completers
 pfs_completers <- eligible_responders %>%
-  filter(!is.na(pi_pfs_1) & !is.na(pi_pfs_2) & !is.na(pi_pfs_3) & !is.na(pi_pfs_4)
-         & !is.na(pi_pfs_5) & !is.na(pi_pfs_6) & !is.na(pi_pfs_7))
+  filter(!is.na(pi_pfs_sum))
   #n = 81 eligible, Program Feedback Scale completers
 
 #Identify Pre-to-Post measures completers
@@ -89,68 +93,85 @@ names_in_order <- qualtrics_data %>%
   select(ends_with("Page Submit")) %>%
   names()
 
-#Put mean duration for each page into a new data frame
-page_durations <- qualtrics_data %>% #change to b_pi_completers dataset? If I do, I get a NaN result for line 120 and I'm not sure why :/
+#Put mean duration and sd for each page into a new data frame - for completers
+page_durations_completers <- b_pi_completers %>% #
   select(ends_with("Page Submit")) %>%
+  replace(is.na(.), 0) %>%
   pivot_longer(cols = everything(),
                names_to = "page",
                values_to = "duration") %>%
   group_by(page) %>%
   summarise(mean_duration = mean(duration, na.rm = T),
-            sd_duration = sd(duration,  na.rm = T)) #seems odd/incorrect that the values I'm getting for standard deviation are so giant
+            sd_duration = sd(duration,  na.rm = T), .groups = "drop") 
+page_durations_completers
+page_durations_completers$page <- factor(page_durations_completers$page, levels = names_in_order)
 
-page_durations$page <- factor(page_durations$page, levels = names_in_order)
-
-#Plot mean duration for each page
-ggplot(data = page_durations) +
+#Plot mean duration for each page - for completers
+ggplot(data = page_durations_completers) +
   geom_col(aes(x = page, y = mean_duration)) +
   coord_flip()
 
-#Identify mean duration for intro and pre-SSI questionnaires, the SSI, and post-SSI questionnaires
-b_ssi_pi_mean_durations <- page_durations %>% 
-  pivot_wider(names_from = page, values_from = mean_duration) %>% 
-  rename_with(~str_replace(.,'tim_Page Submit', 'page_submit')) %>% #didn't need this but leaving for my future reference
-  mutate(b_mean_duration_sec = sum(across(starts_with("b_")))) %>%  
-  mutate(b_mean_duration_minute = b_mean_duration_sec / 60) %>% 
-  mutate(ssi_mean_duration_sec = sum(across(starts_with("bn_")))) %>% #how to account for the fact that not every single person saw every page (e.g., the multiple story options)?
-  mutate(ssi_mean_duration_minute = ssi_mean_duration_sec / 60) %>%
-  mutate(pi_mean_duration_sec = sum(across(starts_with("pi_")))) %>% 
-  mutate(pi_mean_duration_minute = pi_mean_duration_sec / 60)
+#Identify mean duration and sd for intro and pre-SSI questionnaires, the SSI, and post-SSI questionnaires - for completers
 
-b_ssi_pi_mean_durations$b_mean_duration_minute #4.112764 minutes
-b_ssi_pi_mean_durations$ssi_mean_duration_minute #27.76778 minutes
-b_ssi_pi_mean_durations$pi_mean_duration_minute #3.57133 minutes
-                        
-#should we also do standard deviations? If so, what's the best way? 
+b_ssi_pi_mean_durations_completers <- page_durations_completers %>% 
+  mutate(page_category = case_when( #Make a new variable, "page_category":
+    grepl("^b_", page) ~ "pre-intervention", #When page starts with "b_", make it "pre-intervention"...
+    grepl("^bn_", page) ~ "intervention", #...otherwise, when page starts with "bn_", make it "intervention"...
+    grepl("^pi_", page) ~ "post-intervention" #...otherwise, when page starts with "pi", make it "post-intervention"
+  )) %>%
+  group_by(page_category) %>%
+  summarize(mean_duration_seconds = sum(mean_duration), 
+            sd_duration_seconds = sum(sd_duration), .groups = "drop") %>%
+  mutate(mean_duration_minutes = mean_duration_seconds / 60,
+         sd_duration_minutes = sd_duration_seconds / 60) 
+b_ssi_pi_mean_durations_completers
 
+#Put mean duration and sd for each page into a new data frame - for all eligible respondents
+page_durations_all <- eligible_responders %>% 
+  select(ends_with("Page Submit")) %>%
+  replace(is.na(.), 0) %>%
+  pivot_longer(cols = everything(),
+               names_to = "page",
+               values_to = "duration") %>%
+  group_by(page) %>%
+  summarise(mean_duration = mean(duration, na.rm = T),
+            sd_duration = sd(duration,  na.rm = T), .groups = "drop") 
+page_durations_all
+page_durations_all$page <- factor(page_durations_all$page, levels = names_in_order)
+
+#Plot mean duration for each page - for all eligible respondents
+ggplot(data = page_durations_all) +
+  geom_col(aes(x = page, y = mean_duration)) +
+  coord_flip()
+
+#Identify mean duration and sd for intro and pre-SSI questionnaires, the SSI, and post-SSI questionnaires - for all eligible respondents
+
+b_ssi_pi_mean_durations_all <- page_durations_all %>% 
+  mutate(page_category = case_when( #Make a new variable, "page_category":
+    grepl("^b_", page) ~ "pre-intervention", #When page starts with "b_", make it "pre-intervention"...
+    grepl("^bn_", page) ~ "intervention", #...otherwise, when page starts with "bn_", make it "intervention"...
+    grepl("^pi_", page) ~ "post-intervention" #...otherwise, when page starts with "pi", make it "post-intervention"
+  )) %>%
+  group_by(page_category) %>%
+  summarize(mean_duration_seconds = sum(mean_duration), 
+            sd_duration_seconds = sum(sd_duration), .groups = "drop") %>%
+  mutate(mean_duration_minutes = mean_duration_seconds / 60,
+         sd_duration_minutes = sd_duration_seconds / 60) 
+b_ssi_pi_mean_durations_all
+                    
 ##Program Feedback Scale
 
-#Total score (items summed) - how to better explain the difference between this and the one below?
+#Mean and sd of each person's sum score
 mean(pfs_completers$pi_pfs_sum)
 sd(pfs_completers$pi_pfs_sum)
 
-#Overall score (items not summed) - how to better explain the difference between this and the one above?
-pi_pfs_all_items <- data.frame(pfs_completers$pi_pfs_1, pfs_completers$pi_pfs_2, pfs_completers$pi_pfs_3,
-                            pfs_completers$pi_pfs_4, pfs_completers$pi_pfs_5, pfs_completers$pi_pfs_6, 
-                            pfs_completers$pi_pfs_7)
-mean(as.matrix(pi_pfs_all_items))
-sd(as.matrix(pi_pfs_all_items))
-
 #Individual item scores
-mean(pfs_completers$pi_pfs_1)
-sd(pfs_completers$pi_pfs_1)
-mean(pfs_completers$pi_pfs_2)
-sd(pfs_completers$pi_pfs_2)
-mean(pfs_completers$pi_pfs_3)
-sd(pfs_completers$pi_pfs_3)
-mean(pfs_completers$pi_pfs_4)
-sd(pfs_completers$pi_pfs_4)
-mean(pfs_completers$pi_pfs_5)
-sd(pfs_completers$pi_pfs_5)
-mean(pfs_completers$pi_pfs_6)
-sd(pfs_completers$pi_pfs_6)
-mean(pfs_completers$pi_pfs_7)
-sd(pfs_completers$pi_pfs_7)
+pfs_completers %>%
+  select(pi_pfs_1:pi_pfs_7) %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarize(mean = mean(value),
+            sd = sd(value))
 
 ## Hopelessness
 plot(b_pi_completers$b_bhs_sum, b_pi_completers$pi_bhs_sum)
@@ -161,6 +182,34 @@ b_pi_completers %>%
   summarize(across(everything(), list(mean = mean, sd = sd))) %>%
   mutate(d_z = bhs_sum_change_mean / bhs_sum_change_sd,
          d_av = bhs_sum_change_mean / ((b_bhs_sum_sd + pi_bhs_sum_sd) / 2))
+
+#Calculate the summary statistics we need to compute effect sizes, and save them in bhs_stats
+bhs_stats <- b_pi_completers %>%
+  select(b_bhs_sum, pi_bhs_sum) %>%
+  mutate(bhs_sum_change = pi_bhs_sum - b_bhs_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) %>%
+  mutate(d_z = bhs_sum_change_mean / bhs_sum_change_sd,
+         d_av = bhs_sum_change_mean / ((b_bhs_sum_sd + pi_bhs_sum_sd) / 2))
+
+#Take a look at the summary statistics, as well as the manual effect sizes
+print(bhs_stats)
+
+#Calculate d(z)
+d.dep.t.diff(mdiff = bhs_stats$bhs_sum_change_mean,
+             sddiff = bhs_stats$bhs_sum_change_sd,
+             n = bhs_stats$n,
+             a = .05) %>%
+  pluck("estimate")
+
+#Calculate d(av)
+d.dep.t.avg(m1 = bhs_stats$b_bhs_sum_mean,
+            m2 = bhs_stats$pi_bhs_sum_mean,
+            sd1 = bhs_stats$b_bhs_sum_sd,
+            sd2 = bhs_stats$pi_bhs_sum_sd,
+            n = bhs_stats$n,
+            a = .05) %>%
+  pluck("estimate")
 
 ## Agency - this is the subscale we messed up!
 plot(b_pi_completers$b_shs_agency_sum, b_pi_completers$pi_shs_agency_sum)
@@ -205,11 +254,8 @@ b_pi_completers %>%
   select(starts_with("b_dem_gender")) %>%
   select(-"b_dem_gender_16_TEXT") %>%
   replace(is.na(.), 0) %>%
-  summarise(across(everything(), sum)) %>%
-  pivot_longer(everything(), names_to = "gender", values_to = "n") %>% 
-  mutate(percent_all_selections = (n / sum(n))*100) %>%  #is it correct to use the sum that accounts for people selecting multiple choices (n=146)...
-  mutate(percent_of_respondents = (n / 75)*100) #...or should we use the number of respondents (n=75). where to get this n using code?
-
+  summarize(across(everything(), mean)) 
+  
 #Sexual orientation
 b_pi_completers %>%
   count(b_dem_orientation) %>%
@@ -220,10 +266,7 @@ b_pi_completers %>%
   select(starts_with("b_dem_race_ethnicity")) %>%
   select(-"b_dem_race_ethnicity_7_TEXT") %>%
   replace(is.na(.), 0) %>%
-  summarise(across(everything(), sum)) %>%
-  pivot_longer(everything(), names_to = "race/ethnicity", values_to = "n") %>% 
-  mutate(percent_all_selections = (n / sum(n))*100) %>%  #is it correct to use the sum that accounts for people selecting multiple choices (n=97)...
-  mutate(percent_of_respondents = (n / 75)*100) #...or should we use the number of respondents (n=75). where to get this n  using code?
+  summarize(across(everything(), mean))
 
 #Disability
 b_pi_completers %>%
