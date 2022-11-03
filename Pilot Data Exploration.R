@@ -96,7 +96,6 @@ names_in_order <- qualtrics_data %>%
 #Put mean duration and sd for each page into a new data frame - for completers
 page_durations_completers <- b_pi_completers %>% #
   select(ends_with("Page Submit")) %>%
-  replace(is.na(.), 0) %>%
   pivot_longer(cols = everything(),
                names_to = "page",
                values_to = "duration") %>%
@@ -129,7 +128,6 @@ b_ssi_pi_mean_durations_completers
 #Put mean duration and sd for each page into a new data frame - for all eligible respondents
 page_durations_all <- eligible_responders %>% 
   select(ends_with("Page Submit")) %>%
-  replace(is.na(.), 0) %>%
   pivot_longer(cols = everything(),
                names_to = "page",
                values_to = "duration") %>%
@@ -145,7 +143,6 @@ ggplot(data = page_durations_all) +
   coord_flip()
 
 #Identify mean duration and sd for intro and pre-SSI questionnaires, the SSI, and post-SSI questionnaires - for all eligible respondents
-
 b_ssi_pi_mean_durations_all <- page_durations_all %>% 
   mutate(page_category = case_when( #Make a new variable, "page_category":
     grepl("^b_", page) ~ "pre-intervention", #When page starts with "b_", make it "pre-intervention"...
@@ -158,6 +155,24 @@ b_ssi_pi_mean_durations_all <- page_durations_all %>%
   mutate(mean_duration_minutes = mean_duration_seconds / 60,
          sd_duration_minutes = sd_duration_seconds / 60) 
 b_ssi_pi_mean_durations_all
+
+#An example histogram - evaluate line-by-line to see what this is doing!
+b_pi_completers %>% 
+  select(ResponseId, ends_with("Page Submit")) %>%
+  pivot_longer(cols = -ResponseId,
+               names_to = "page",
+               values_to = "duration") %>% 
+  mutate(page_category = case_when( #Make a new variable, "page_category":
+    grepl("^b_", page) ~ "pre-intervention", #When page starts with "b_", make it "pre-intervention"...
+    grepl("^bn_", page) ~ "intervention", #...otherwise, when page starts with "bn_", make it "intervention"...
+    grepl("^pi_", page) ~ "post-intervention" #...otherwise, when page starts with "pi", make it "post-intervention"
+  )) %>%
+  group_by(ResponseId, page_category) %>%
+  summarize(duration = sum(duration, na.rm = T) / 60) %>%
+  drop_na(duration) %>%
+  ggplot() +
+    geom_histogram(aes(duration)) +
+    facet_wrap(. ~ page_category, scales = "free")
                     
 ##Program Feedback Scale
 
