@@ -19,7 +19,7 @@ library(MOTE)
 # In order to do that, you have to register your Qualtrics credentials with the
 # qualtRics package: https://github.com/ropensci/qualtRics#register-your-qualtrics-credentials
 pull_fresh_dataset <- F
-
+ 
 if(pull_fresh_dataset) {
  
   # Pull data
@@ -96,7 +96,7 @@ names_in_order <- qualtrics_data %>%
 #Put mean duration and sd for each page into a new data frame - for completers
 page_durations_completers <- b_pi_completers %>% #
   select(ends_with("Page Submit")) %>%
-  replace(is.na(.), 0) %>%
+  select(-"b_ineligible_tim_Page Submit")  %>%
   pivot_longer(cols = everything(),
                names_to = "page",
                values_to = "duration") %>%
@@ -104,6 +104,7 @@ page_durations_completers <- b_pi_completers %>% #
   summarise(mean_duration = mean(duration, na.rm = T),
             sd_duration = sd(duration,  na.rm = T), .groups = "drop") 
 page_durations_completers
+
 page_durations_completers$page <- factor(page_durations_completers$page, levels = names_in_order)
 
 #Plot mean duration for each page - for completers
@@ -126,10 +127,28 @@ b_ssi_pi_mean_durations_completers <- page_durations_completers %>%
          sd_duration_minutes = sd_duration_seconds / 60) 
 b_ssi_pi_mean_durations_completers
 
+#An example histogram - evaluate line-by-line to see what this is doing!
+b_pi_completers %>% 
+  select(ResponseId, ends_with("Page Submit")) %>%
+  pivot_longer(cols = -ResponseId,
+               names_to = "page",
+               values_to = "duration") %>% 
+  mutate(page_category = case_when( #Make a new variable, "page_category":
+    grepl("^b_", page) ~ "pre-intervention", #When page starts with "b_", make it "pre-intervention"...
+    grepl("^bn_", page) ~ "intervention", #...otherwise, when page starts with "bn_", make it "intervention"...
+    grepl("^pi_", page) ~ "post-intervention" #...otherwise, when page starts with "pi", make it "post-intervention"
+  )) %>%
+  group_by(ResponseId, page_category) %>%
+  summarize(duration = sum(duration, na.rm = T) / 60) %>%
+  drop_na(duration) %>%
+  ggplot() +
+  geom_histogram(aes(duration)) +
+  facet_wrap(. ~ page_category, scales = "free")
+
 #Put mean duration and sd for each page into a new data frame - for all eligible respondents
 page_durations_all <- eligible_responders %>% 
   select(ends_with("Page Submit")) %>%
-  replace(is.na(.), 0) %>%
+  select(-"b_ineligible_tim_Page Submit") %>% 
   pivot_longer(cols = everything(),
                names_to = "page",
                values_to = "duration") %>%
@@ -138,6 +157,7 @@ page_durations_all <- eligible_responders %>%
             sd_duration = sd(duration,  na.rm = T), .groups = "drop") 
 page_durations_all
 page_durations_all$page <- factor(page_durations_all$page, levels = names_in_order)
+
 
 #Plot mean duration for each page - for all eligible respondents
 ggplot(data = page_durations_all) +
@@ -162,8 +182,14 @@ b_ssi_pi_mean_durations_all
 ##Program Feedback Scale
 
 #Mean and sd of each person's sum score
-mean(pfs_completers$pi_pfs_sum)
-sd(pfs_completers$pi_pfs_sum)
+mean_total_PFS <- mean(pfs_completers$pi_pfs_sum)
+mean_total_PFS 
+sd_total_PFS <- sd(pfs_completers$pi_pfs_sum)
+sd_total_PFS 
+mean_of_all_items_PFS <- mean_total_PFS / 7
+mean_of_all_items_PFS
+sd_of_all_items_PFS <- sd_total_PFS / 7
+sd_of_all_items_PFS 
 
 #Individual item scores
 pfs_completers %>%
@@ -176,12 +202,6 @@ pfs_completers %>%
 ## Hopelessness
 plot(b_pi_completers$b_bhs_sum, b_pi_completers$pi_bhs_sum)
 t.test(b_pi_completers$b_bhs_sum, b_pi_completers$pi_bhs_sum, paired = TRUE)
-b_pi_completers %>%
-  select(b_bhs_sum, pi_bhs_sum) %>%
-  mutate(bhs_sum_change = pi_bhs_sum - b_bhs_sum) %>%
-  summarize(across(everything(), list(mean = mean, sd = sd))) %>%
-  mutate(d_z = bhs_sum_change_mean / bhs_sum_change_sd,
-         d_av = bhs_sum_change_mean / ((b_bhs_sum_sd + pi_bhs_sum_sd) / 2))
 
 #Calculate the summary statistics we need to compute effect sizes, and save them in bhs_stats
 bhs_stats <- b_pi_completers %>%
@@ -214,33 +234,98 @@ d.dep.t.avg(m1 = bhs_stats$b_bhs_sum_mean,
 ## Agency - this is the subscale we messed up!
 plot(b_pi_completers$b_shs_agency_sum, b_pi_completers$pi_shs_agency_sum)
 t.test(b_pi_completers$b_shs_agency_sum, b_pi_completers$pi_shs_agency_sum, paired = TRUE)
-b_pi_completers %>%
+
+#Calculate the summary statistics we need to compute effect sizes, and save them in shs_agency_stats
+shs_agency_stats <- b_pi_completers %>%
   select(b_shs_agency_sum, pi_shs_agency_sum) %>%
   mutate(shs_agency_sum_change = pi_shs_agency_sum - b_shs_agency_sum) %>%
-  summarize(across(everything(), list(mean = mean, sd = sd))) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) %>%
   mutate(d_z = shs_agency_sum_change_mean / shs_agency_sum_change_sd,
          d_av = shs_agency_sum_change_mean / ((b_shs_agency_sum_sd + pi_shs_agency_sum_sd) / 2))
+
+#Take a look at the summary statistics, as well as the manual effect sizes
+print(shs_agency_stats)
+
+#Calculate d(z)
+d.dep.t.diff(mdiff = shs_agency_stats$shs_agency_sum_change_mean,
+             sddiff = shs_agency_stats$shs_agency_sum_change_sd,
+             n = bhs_stats$n,
+             a = .05) %>%
+  pluck("estimate")
+
+#Calculate d(av)
+d.dep.t.avg(m1 = shs_agency_stats$b_shs_agency_sum_mean,
+            m2 = shs_agency_stats$pi_shs_agency_sum_mean,
+            sd1 = shs_agency_stats$b_shs_agency_sum_sd,
+            sd2 = shs_agency_stats$pi_shs_agency_sum_sd,
+            n = shs_agency_stats$n,
+            a = .05) %>%
+  pluck("estimate")
 
 ## Functionality Appreciation Scale
 plot(b_pi_completers$b_fas_sum, b_pi_completers$pi_fas_sum)
 t.test(b_pi_completers$b_fas_sum, b_pi_completers$pi_fas_sum, paired = TRUE)
-b_pi_completers %>%
+
+#Calculate the summary statistics we need to compute effect sizes, and save them in fas_stats
+fas_stats <- b_pi_completers %>%
   select(b_fas_sum, pi_fas_sum) %>%
   mutate(fas_sum_change = pi_fas_sum - b_fas_sum) %>%
-  summarize(across(everything(), list(mean = mean, sd = sd))) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) %>%
   mutate(d_z = fas_sum_change_mean / fas_sum_change_sd,
          d_av = fas_sum_change_mean / ((b_fas_sum_sd + pi_fas_sum_sd) / 2))
+
+#Take a look at the summary statistics, as well as the manual effect sizes
+print(fas_stats)
+
+#Calculate d(z)
+d.dep.t.diff(mdiff = fas_stats$fas_sum_change_mean,
+             sddiff = fas_stats$fas_sum_change_sd,
+             n = fas_stats$n,
+             a = .05) %>%
+  pluck("estimate")
+
+#Calculate d(av)
+d.dep.t.avg(m1 = fas_stats$b_fas_sum_mean,
+            m2 = fas_stats$pi_fas_sum_mean,
+            sd1 = fas_stats$b_fas_sum_sd,
+            sd2 = fas_stats$pi_fas_sum_sd,
+            n = fas_stats$n,
+            a = .05) %>%
+  pluck("estimate")
 
 ## Body Dissatisfaction 
 plot(b_pi_completers$b_bsss_sum, b_pi_completers$pi_bsss_sum)
 t.test(b_pi_completers$b_bsss_sum, b_pi_completers$pi_bsss_sum, paired = TRUE)
-b_pi_completers %>%
+
+#Calculate the summary statistics we need to compute effect sizes, and save them in bsss_stats
+bsss_stats <- b_pi_completers %>%
   select(b_bsss_sum, pi_bsss_sum) %>%
   mutate(bsss_sum_change = pi_bsss_sum - b_bsss_sum) %>%
-  summarize(across(everything(), list(mean = mean, sd = sd))) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) %>%
   mutate(d_z = bsss_sum_change_mean / bsss_sum_change_sd,
          d_av = bsss_sum_change_mean / ((b_bsss_sum_sd + pi_bsss_sum_sd) / 2))
 
+#Take a look at the summary statistics, as well as the manual effect sizes
+print(bsss_stats)
+
+#Calculate d(z)
+d.dep.t.diff(mdiff = bsss_stats$bsss_sum_change_mean,
+             sddiff = bsss_stats$bsss_sum_change_sd,
+             n = bsss_stats$n,
+             a = .05) %>%
+  pluck("estimate")
+
+#Calculate d(av)
+d.dep.t.avg(m1 = bsss_stats$b_bsss_sum_mean,
+            m2 = bsss_stats$pi_bsss_sum_mean,
+            sd1 = bsss_stats$b_bsss_sum_sd,
+            sd2 = bsss_stats$pi_bsss_sum_sd,
+            n = bsss_stats$n,
+            a = .05) %>%
+  pluck("estimate")
 
 ## Demographics
 
@@ -255,7 +340,15 @@ b_pi_completers %>%
   select(-"b_dem_gender_16_TEXT") %>%
   replace(is.na(.), 0) %>%
   summarize(across(everything(), mean)) 
-  
+
+b_pi_completers %>%
+  select(starts_with("b_dem_gender")) %>%
+  select(-"b_dem_gender_16_TEXT") %>%
+  replace(is.na(.), 0) %>%
+  summarise(across(everything(), sum)) %>%
+  pivot_longer(everything(), names_to = "gender", values_to = "n") %>% 
+  mutate(percent_of_respondents = (n / 75)*100)
+
 #Sexual orientation
 b_pi_completers %>%
   count(b_dem_orientation) %>%
@@ -268,6 +361,14 @@ b_pi_completers %>%
   replace(is.na(.), 0) %>%
   summarize(across(everything(), mean))
 
+b_pi_completers %>%
+  select(starts_with("b_dem_race_ethnicity")) %>%
+  select(-"b_dem_race_ethnicity_7_TEXT") %>%
+  replace(is.na(.), 0) %>%
+  summarise(across(everything(), sum)) %>%
+  pivot_longer(everything(), names_to = "race/ethnicity", values_to = "n") %>% 
+  mutate(percent_of_respondents = (n / 75)*100)
+
 #Disability
 b_pi_completers %>%
   count(b_dem_disability_1) %>%
@@ -277,3 +378,4 @@ b_pi_completers %>%
 b_pi_completers %>%
   count(b_dem_age) %>%
   mutate(percent = (n / sum(n))*100)
+
