@@ -13,6 +13,8 @@ if(!require(MBESS)){install.packages('MBESS')}
 library(MBESS)
 if(!require(MOTE)){install.packages('MOTE')}
 library(MOTE)
+if(!require(flextable)){install.packages('flextable')}
+library(flextable)
 
 ## Download Pilot Data
 # To pull a fresh dataset from Qualtrics, set this to TRUE
@@ -64,26 +66,38 @@ all_responders <- qualtrics_data %>%
 #Identify eligible responders
 eligible_responders <- all_responders %>%
   filter(is.na(Eligibility))
+all_responders_number <- count(all_responders)
+eligible_responders_number <- count(eligible_responders)
   #n = 353 responders total
   #n = 224 eligible responders, regardless of completion
+eligible_responders_percent <- (eligible_responders_number * 100) / all_responders_number
+eligible_responders_percent
 
 #Identify SSI completers
 ssi_completers <- eligible_responders %>%
   rename("ssi_submit" = "bn_bp_bn_like_tim_Page Submit") %>%
   filter(!is.na(ssi_submit))
-  #n = 88 eligible, SSI completers
+ssi_completers_number <- count(ssi_completers) 
+ #n = 88 eligible, SSI completers
+ssi_completers_percent <- (ssi_completers_number * 100) / eligible_responders_number
+ssi_completers_percent
 
 #Identify Program Feedback Scale completers
 pfs_completers <- eligible_responders %>%
   filter(!is.na(pi_pfs_sum))
+pfs_completers_number <- count(pfs_completers)
   #n = 81 eligible, Program Feedback Scale completers
+pfs_completers_percent <- (pfs_completers_number * 100) / eligible_responders_number
+pfs_completers_percent
 
 #Identify Pre-to-Post measures completers
 b_pi_completers <- eligible_responders %>%
   filter(!is.na(b_bhs_sum) & !is.na(b_shs_agency_sum) & !is.na(b_fas_sum) & !is.na(b_bsss_sum) 
          & !is.na(pi_bhs_sum) & !is.na(pi_shs_agency_sum) & !is.na(pi_fas_sum) & !is.na(pi_bsss_sum))
+b_pi_completers_number <- count(b_pi_completers)
   #n = 75 pre-to-post measure completers
-
+b_pi_completers_percent <- (b_pi_completers_number * 100) / eligible_responders_number
+b_pi_completers_percent 
 
 ####  Analysis  ####
 
@@ -178,7 +192,79 @@ b_ssi_pi_mean_durations_all <- page_durations_all %>%
   mutate(mean_duration_minutes = mean_duration_seconds / 60,
          sd_duration_minutes = sd_duration_seconds / 60) 
 b_ssi_pi_mean_durations_all
-                    
+
+##Dropout
+
+#Count all respondents who submitted each page
+page_submit_all <- qualtrics_data %>%
+  select(ends_with("Page Submit"))
+colSums(!is.na(page_submit_all))
+
+#Count eligible respondents who submitted each page
+page_submit_eligible <- eligible_responders %>%
+  select(ends_with("Page Submit"))
+colSums(!is.na(page_submit_eligible))
+
+#Dropout during study information
+
+study_info_submit <- qualtrics_data %>%
+  rename("study_info_submit" = "b_screener_intro_tim_Page Submit") %>%
+  filter(!is.na(study_info_submit))
+study_info_submit_number <- count(study_info_submit) 
+study_info_submit_number 
+study_info_dropout_number <- all_responders_number - study_info_submit_number
+study_info_dropout_number
+
+#Dropout during screener
+
+screener_submit <- qualtrics_data %>%
+  rename("screener_submit" = "b_screener_tim_Page Submit") %>%
+  filter(!is.na(screener_submit))
+screener_submit_number <- count(screener_submit) 
+screener_submit_number
+screener_dropout_number <- all_responders_number - screener_submit_number 
+screener_dropout_number
+
+#Dropout during pre-SSI outcome measures
+
+b_submit <- eligible_responders %>%
+  rename("b_submit" = "b_pre_thanks_tim_Page Submit") %>%
+  filter(!is.na(b_submit))
+b_submit_number <- count(b_submit) 
+b_submit_number
+b_dropout_number <- eligible_responders_number - b_submit_number
+b_dropout_number
+
+#Dropout during SSI
+
+ssi_submit <- eligible_responders %>%
+  rename("ssi_submit" = "bn_bp_bn_like_tim_Page Submit") %>%
+  filter(!is.na(ssi_submit))
+ssi_submit_number <- count(ssi_submit) 
+ssi_submit_number 
+ssi_dropout_number <- b_submit_number - ssi_submit_number
+ssi_dropout_number
+
+#Dropout during PFS
+
+pfs_submit <- eligible_responders %>%
+  rename("pfs_submit" = "pi_pfs_tim_Page Submit") %>%
+  filter(!is.na(pfs_submit))
+pfs_submit_number <- count(pfs_submit) 
+pfs_submit_number 
+pfs_dropout_number <- ssi_submit_number - pfs_submit_number 
+pfs_dropout_number
+
+#Dropout during post-SSI outcome measures
+
+pi_submit <- eligible_responders %>%
+  rename("pi_submit" = "pi_bsss_tim_Page Submit") %>%
+  filter(!is.na(pi_submit))
+pi_submit_number <- count(pi_submit) 
+pi_submit_number 
+pi_dropout_number <- pfs_submit_number - pi_submit_number 
+pi_dropout_number
+                 
 ##Program Feedback Scale
 
 #Mean and sd of each person's sum score
@@ -198,6 +284,40 @@ pfs_completers %>%
   group_by(name) %>%
   summarize(mean = mean(value),
             sd = sd(value))
+
+#Open-ended positive feedback
+
+pfs_completers %>% 
+  filter(!is.na(pi_pfs_like))
+pi_pfs_like_responses_number <- count(pi_pfs_like_responses) 
+pi_pfs_like_responses_number 
+pi_pfs_like_responses_percent <- (pi_pfs_like_responses_number * 100) / pfs_completers_number
+pi_pfs_like_responses_percent
+
+#Open-ended constructive feedback
+
+pfs_completers %>% 
+  filter(!is.na(pi_pfs_change))
+pi_pfs_change_responses_number <- count(pi_pfs_change_responses) 
+pi_pfs_change_responses_number 
+pi_pfs_change_responses_percent <- (pi_pfs_change_responses_number * 100) / pfs_completers_number
+pi_pfs_change_responses_percent
+
+#Open-ended other feedback
+
+pfs_completers %>% 
+  filter(!is.na(pi_pfs_other))
+pi_pfs_other_responses_number <- count(pi_pfs_other_responses) 
+pi_pfs_other_responses_number 
+pi_pfs_other_responses_percent <- (pi_pfs_other_responses_number * 100) / pfs_completers_number
+pi_pfs_other_responses_percent
+
+#Written feedback in its own dataframe
+
+pfs_qual <- pfs_completers %>% 
+  select(ResponseId, pi_pfs_like, pi_pfs_change, pi_pfs_other)
+pfs_qual 
+flextable::flextable(pfs_qual, cwidth = c(0.5,7,0.5))
 
 ## Hopelessness
 plot(b_pi_completers$b_bhs_sum, b_pi_completers$pi_bhs_sum)
