@@ -277,6 +277,14 @@ mean_of_all_items_PFS
 sd_of_all_items_PFS <- sd_total_PFS / 7
 sd_of_all_items_PFS 
 
+#N and percent of participants with sum score >3, reflect overall perceived SSI acceptability
+pi_pfs_sum_scores <- pfs_completers$pi_pfs_sum / 7
+pi_pfs_sum_scores_acceptable <- pi_pfs_sum_scores > 3
+pi_pfs_sum_scores_acceptable_number <-sum(pi_pfs_sum_scores_acceptable)
+pi_pfs_sum_scores_acceptable_number
+pi_pfs_sum_scores_acceptable_percent <- (pi_pfs_sum_scores_acceptable_number * 100) / pfs_completers_number
+pi_pfs_sum_scores_acceptable_percent
+
 #Individual item scores
 pfs_completers %>%
   select(pi_pfs_1:pi_pfs_7) %>%
@@ -285,9 +293,54 @@ pfs_completers %>%
   summarize(mean = mean(value),
             sd = sd(value))
 
+#N and percent of participants with item score >3, reflect endorsement of the given item
+
+#Item 1
+pi_pfs_1_acceptable <- pfs_completers$pi_pfs_1 > 3
+pi_pfs_1_acceptable_number <- sum(pi_pfs_1_acceptable)
+pi_pfs_1_acceptable_number
+pi_pfs_1_acceptable_percent <- (pi_pfs_1_acceptable_number * 100) / pfs_completers_number
+pi_pfs_1_acceptable_percent
+#Item 2
+pi_pfs_2_acceptable <- pfs_completers$pi_pfs_2 > 3
+pi_pfs_2_acceptable_number <- sum(pi_pfs_2_acceptable)
+pi_pfs_2_acceptable_number
+pi_pfs_2_acceptable_percent <- (pi_pfs_2_acceptable_number * 100) / pfs_completers_number
+pi_pfs_2_acceptable_percent
+#Iten 3
+pi_pfs_3_acceptable <- pfs_completers$pi_pfs_3 > 3
+pi_pfs_3_acceptable_number <- sum(pi_pfs_3_acceptable)
+pi_pfs_3_acceptable_number
+pi_pfs_3_acceptable_percent <- (pi_pfs_3_acceptable_number * 100) / pfs_completers_number
+pi_pfs_3_acceptable_percent
+#Item 4
+pi_pfs_4_acceptable <- pfs_completers$pi_pfs_4 > 3
+pi_pfs_4_acceptable_number <- sum(pi_pfs_4_acceptable)
+pi_pfs_4_acceptable_number
+pi_pfs_4_acceptable_percent <- (pi_pfs_4_acceptable_number * 100) / pfs_completers_number
+pi_pfs_4_acceptable_percent
+#Item 5
+pi_pfs_5_acceptable <- pfs_completers$pi_pfs_5 > 3
+pi_pfs_5_acceptable_number <- sum(pi_pfs_5_acceptable)
+pi_pfs_5_acceptable_number
+pi_pfs_5_acceptable_percent <- (pi_pfs_5_acceptable_number * 100) / pfs_completers_number
+pi_pfs_5_acceptable_percent
+#Item 6
+pi_pfs_6_acceptable <- pfs_completers$pi_pfs_6 > 3
+pi_pfs_6_acceptable_number <- sum(pi_pfs_6_acceptable)
+pi_pfs_6_acceptable_number
+pi_pfs_6_acceptable_percent <- (pi_pfs_6_acceptable_number * 100) / pfs_completers_number
+pi_pfs_6_acceptable_percent
+#Item 7
+pi_pfs_7_acceptable <- pfs_completers$pi_pfs_7 > 3
+pi_pfs_7_acceptable_number <- sum(pi_pfs_7_acceptable)
+pi_pfs_7_acceptable_number
+pi_pfs_7_acceptable_percent <- (pi_pfs_7_acceptable_number * 100) / pfs_completers_number
+pi_pfs_7_acceptable_percent
+
 #Open-ended positive feedback
 
-pfs_completers %>% 
+pi_pfs_like_responses <- pfs_completers %>% 
   filter(!is.na(pi_pfs_like))
 pi_pfs_like_responses_number <- count(pi_pfs_like_responses) 
 pi_pfs_like_responses_number 
@@ -296,21 +349,46 @@ pi_pfs_like_responses_percent
 
 #Open-ended constructive feedback
 
-pfs_completers %>% 
+pi_pfs_change_responses <- pfs_completers %>% 
   filter(!is.na(pi_pfs_change))
 pi_pfs_change_responses_number <- count(pi_pfs_change_responses) 
 pi_pfs_change_responses_number 
-pi_pfs_change_responses_percent <- (pi_pfs_change_responses_number * 100) / pfs_completers_number
+#14 of these comments do not provide any constructive feedback. 
+#R_a8BOmDzs0YwtTFv
+#R_un1fr6cSF9AFAk1
+#R_un1fr6cSF9AFAk1
+#R_2Pz2xTN3dfozgU6
+#R_1QDSvbXJ2VJ51oC
+#R_b4qaP6e1vH0IOpH
+#R_3kw9bRWDbI5ubyH
+#R_21tXxxhuUgyo70D
+#R_3MEAl9RL0EWI6zn
+#R_1jZLhhTs2fqYmvL
+#R_3dKzFAxsoTszXNF
+#R_2qy2KmeBCzyLZG9
+#R_24eXPxRMIXM8MKR
+#R_3KYKTBQOBBfRIrC
+pi_pfs_change_responses_number_revised <- pi_pfs_change_responses_number - 14
+pi_pfs_change_responses_number_revised 
+pi_pfs_change_responses_percent <- (pi_pfs_change_responses_number_revised * 100) / pfs_completers_number
 pi_pfs_change_responses_percent
 
 #Open-ended other feedback
 
-pfs_completers %>% 
+pi_pfs_other_responses <- pfs_completers %>% 
   filter(!is.na(pi_pfs_other))
 pi_pfs_other_responses_number <- count(pi_pfs_other_responses) 
 pi_pfs_other_responses_number 
 pi_pfs_other_responses_percent <- (pi_pfs_other_responses_number * 100) / pfs_completers_number
 pi_pfs_other_responses_percent
+
+#Open-ended feedback - all
+pi_pfs_all_responses <- pfs_completers %>% 
+  filter(!is.na(pi_pfs_like) | !is.na(pi_pfs_change) | !is.na(pi_pfs_other))
+pi_pfs_all_responses_number <- count(pi_pfs_all_responses) 
+pi_pfs_all_responses_number 
+pi_pfs_all_percent <- (pi_pfs_all_responses_number * 100) / pfs_completers_number
+pi_pfs_all_responses_percent
 
 #Written feedback in its own dataframe
 
