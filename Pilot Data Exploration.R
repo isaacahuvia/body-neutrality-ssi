@@ -577,3 +577,55 @@ b_pi_completers %>%
   count(b_dem_age) %>%
   mutate(percent = (n / sum(n))*100)
 
+
+
+
+#### New Plots
+## Pre-Post Changes
+b_pi_completers %>%
+  select(b_bhs_sum, pi_bhs_sum,
+         b_fas_sum, pi_fas_sum,
+         b_bsss_sum, pi_bsss_sum) %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarize(mean = mean(value),
+            sd = sd(value),
+            ci = (sd / sqrt(n())) * 1.96) %>%
+  mutate(timepoint = str_extract(name, "^[a-z]*"),
+         measure = str_extract(name, "(?<=_)[a-z]*(?=_)") %>%
+           toupper()) %>%
+  ggplot() +
+    geom_point(aes(x = timepoint, y = mean, group = measure)) +
+    geom_line(aes(x = timepoint, y = mean, group = measure)) +
+    geom_errorbar(aes(x = timepoint, ymin = mean - ci, ymax = mean + ci)) +
+    scale_y_continuous(name = "Sum Score", limits = c(0, NA)) +
+    scale_x_discrete(name = "Timepoint", labels = c("Baseline", "Post-Intervention")) +
+    facet_wrap(~ measure, scales = "free_y") +
+    theme_classic()
+
+
+## Stacked Bar of PFS
+library(forcats)
+
+pfs_completers %>%
+  select(pi_pfs_1:pi_pfs_7) %>%
+  pivot_longer(everything()) %>%
+  mutate(value = value + 1) %>% #DELETE THIS
+  mutate(
+    item_label = case_when(
+      name == "pi_pfs_1" ~ "Label 1",
+      name == "pi_pfs_2" ~ "Label 2",
+      T ~ name),
+    response_label = factor(
+      x = value,
+      levels = c(1, 2, 3, 4, 5),
+      labels = c("Really Disagree", "Disagree", "Neutral", "Agree", "Really Agree")
+    )) %>%
+  count(item_label, response_label) %>%
+  ggplot() +
+    geom_col(aes(x = item_label, y = n, fill = fct_rev(response_label))) +
+    scale_x_discrete(name = "Program Feedback Scale Item") +
+    scale_fill_discrete(name = "Response") +
+    scale_y_continuous(name = "Frequency") +
+    theme_classic() +
+    ggtitle("PFS Responses")
