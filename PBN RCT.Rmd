@@ -1,0 +1,544 @@
+---
+title: "PBN RCT"
+author: "Arielle Smith"
+date: "2024-04-24"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Load required packages
+if(!require(tidyverse)){install.packages('tidyverse')}
+library(tidyverse)
+if(!require(lmtest)){install.packages('lmtest')}
+library(lmtest)
+if(!require(car)){install.packages('car')}
+library(car)
+if(!require(olsrr)){install.packages('olsrr')}
+library(olsrr)
+if(!require(sandwich)){install.packages('sandwich')}
+library(sandwich)
+if(!require(MOTE)){install.packages('MOTE')}
+library(MOTE)
+
+#Set working directory
+setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline)")
+
+#Load data
+original_survey_data <- read.csv("original_survey_data.csv")
+new_survey_data <- read.csv("new_survey_data.csv")
+```
+
+```{r merge and clean data}
+#Merge original_survey_data (closed because of frauds) and new_survey_data
+
+##original_survey_data has 731 columns but new_survey_data has 729. Figure out the 2 differences
+cols_in_original_only <- setdiff(names(original_survey_data), names(new_survey_data))
+print(cols_in_original_only)
+
+##Remove the 2 extra Qualtrics columns from original_survey_data (won't mess things up because they are at the end and don't have anything important)
+original_survey_data <- original_survey_data %>%
+  select(-Q_AmbiguousTextPresent, -Q_AmbiguousTextQuestions)
+
+##Now we can merge
+merged_data <- rbind(original_survey_data, new_survey_data)
+
+#Create a binary variable for Condition# where 0 = Control and 1 = Intervention
+merged_data <- merged_data %>%
+  mutate(Condition = case_when(
+    Condition == "Control" ~ 0,
+    Condition == "Intervention" ~ 1))
+
+#Select the participants being included in analysis (per data integrity checks, should be N=220)
+included_participants <- merged_data %>%
+  filter(Participant_ID %in% c(40077, 15186, 11697, 95674, 40889, 84608, 61437, 16432, 22485, 24378, 21140, 58776, 13649, 83679, 62516, 52326, 20457, 39455, 64886, 35756, 65322, 86883, 72424, 92104, 33504, 38713, 96986, 28301, 14617, 14806, 93863, 13842, 31849, 74139, 53775, 57712, 96120, 49399, 45841, 40397, 75164, 71675, 30277, 58650, 18169, 41917, 50884, 70371, 48434, 18974, 18856, 17231, 56049, 68213, 93764, 15333, 98726, 80569, 63962, 66481, 40376, 83329, 90314, 59978, 66920, 35067, 15025, 77121, 89229, 82287, 96711, 11308, 53611, 57517, 47321, 43097, 74462, 11290, 49908, 24314, 69311, 70500, 49864, 69898, 74951, 38601, 60126, 26551, 58830, 21592, 17149, 31067, 39743, 71511, 45789, 84417, 56534, 98233, 84267, 68200, 76371, 45565, 48031, 19978, 25987, 38488, 25643, 86804, 86300, 18348, 90947, 53863, 17032, 60501, 27455, 62781, 88241, 55765, 39606, 66912, 67236, 11868, 68267, 35553, 95389, 80941, 15777, 53969, 95004, 43258, 64019, 99949, 72626, 47331, 50401, 96007, 65187, 31188, 93980, 76870, 32309, 85411, 85344, 48970, 54988, 49034, 77719, 78040, 86763, 33280, 23158, 87771, 21842, 19199, 96320, 64719, 78881, 49236, 26869, 65509, 38538, 73614, 80888, 55845, 86114, 22584, 81514, 92289, 86314, 65863, 77450, 25638, 88046, 99374, 13638, 35047, 38572, 26776, 86023, 43295, 20973, 53220, 29614, 62193, 42215, 41799, 93664, 50466, 78161, 85350, 87127, 15065, 11827, 63743, 20364, 17670, 44268, 48593, 96225, 71632, 97410, 90795, 49102, 68198, 16855, 64531, 13302, 57955, 21313, 13023, 69913, 75263, 93022, 48022, 22684, 17052, 72038, 56590, 56815, 76432))
+
+#Make necessary variables numeric
+included_participants <- included_participants %>%
+  mutate(across(
+    starts_with(c("b_bhs_", "pi_bhs_", "b_shs_agency_", "pi_shs_agency_", "b_biss_", "pi_biss_", "b_fas_", "pi_fas_", "b_biaaq_", "pi_biaaq_", "b_chime_", "pi_chime_", "pi_pfs_1", "pi_pfs_2", "pi_pfs_3", "pi_pfs_4", "pi_pfs_5", "pi_pfs_6", "pi_pfs_7")),
+    as.numeric
+  ))
+
+#Create scores and filter for complete cases only
+included_participants_complete <- included_participants %>%
+  mutate(b_bhs_sum = b_bhs_1 + b_bhs_2 + b_bhs_3 + b_bhs_4,
+         pi_bhs_sum = pi_bhs_1 + pi_bhs_2 + pi_bhs_3 + pi_bhs_4,
+         b_shs_agency_sum = b_shs_agency_1 + b_shs_agency_2 + b_shs_agency_3,
+         pi_shs_agency_sum = pi_shs_agency_1 + pi_shs_agency_2 + pi_shs_agency_3,
+         b_biss_sum = b_biss_1 + b_biss_2 + b_biss_3 + b_biss_4 +  b_biss_5 + b_biss_6, #items 2, 4, and 6 are already reverse-scored in Qualtrics
+         pi_biss_sum = pi_biss_1 + (pi_biss_2) + pi_biss_3 + (pi_biss_4) +  pi_biss_5 + pi_biss_6, #items 2, 4, and 6 are already reverse-scored in Qualtrics
+         b_fas_sum = b_fas_1 + b_fas_2 + b_fas_3 + b_fas_4 + b_fas_5 + b_fas_6 + b_fas_7,
+         pi_fas_sum = pi_fas_1 + pi_fas_2 + pi_fas_3 + pi_fas_4 + pi_fas_5 + pi_fas_6 + pi_fas_7,
+         b_biaaq_sum = b_biaaq_1 + b_biaaq_2 + b_biaaq_3 + b_biaaq_4 + b_biaaq_5 + b_biaaq_6 + b_biaaq_7 + b_biaaq_8 + b_biaaq_9 + b_biaaq_10 + b_biaaq_11 + b_biaaq_12, #all items are already reverse-scored in Qualtrics
+         pi_biaaq_sum = pi_biaaq_1 + pi_biaaq_2 + pi_biaaq_3 + pi_biaaq_4 + pi_biaaq_5 + pi_biaaq_6 + pi_biaaq_7 + pi_biaaq_8 + pi_biaaq_9 + pi_biaaq_10 + pi_biaaq_11 + pi_biaaq_12, #all items are already reverse-scored in Qualtrics
+         b_chime_sum = b_chime_1 + b_chime_2 + b_chime_3, #item 3 is already reverse-scored in Qualtrics
+         pi_chime_sum = pi_chime_1 + pi_chime_2 + pi_chime_3, #item 3 is already reverse-scored in Qualtrics
+         pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7) %>%
+filter(complete.cases(.))
+#N=187
+
+#Create a dataframe with complete PBN participants only
+pbn_complete <- included_participants_complete %>%
+  filter(Condition == 1)
+#N=91
+
+#Create a dataframe with complete Control participants only
+control_complete <- included_participants_complete %>%
+  filter(Condition == 0)
+#N=96
+```
+
+```{r descriptives}
+descriptives <- included_participants_complete %>%
+  group_by(Condition) %>%
+  summarize(mean_b_bhs_sum = mean(b_bhs_sum),
+            sd_b_bhs_sum = sd(b_bhs_sum),
+            mean_pi_bhs_sum = mean(pi_bhs_sum),
+            sd_pi_bhs_sum = sd(pi_bhs_sum),
+            mean_b_shs_agency_sum = mean(b_shs_agency_sum),
+            sd_b_shs_agency_sum = sd(b_shs_agency_sum),
+            mean_pi_shs_agency_sum = mean(pi_shs_agency_sum),
+            sd_pi_shs_agency_sum = sd(pi_shs_agency_sum),
+            mean_b_biss_sum = mean(b_biss_sum),
+            sd_b_biss_sum = sd(b_biss_sum),
+            mean_pi_biss_sum = mean(pi_biss_sum),
+            sd_pi_biss_sum = sd(pi_biss_sum),
+            mean_b_fas_sum = mean(b_fas_sum),
+            sd_b_fas_sum = sd(b_fas_sum),
+            mean_pi_fas_sum = mean(pi_fas_sum),
+            sd_pi_fas_sum = sd(pi_fas_sum),
+            mean_b_biaaq_sum = mean(b_biaaq_sum),
+            sd_b_biaaq_sum = sd(b_biaaq_sum),
+            mean_pi_biaaq_sum = mean(pi_biaaq_sum),
+            sd_pi_biaaq_sum = sd(pi_biaaq_sum),
+            mean_b_chime_sum = mean(b_chime_sum),
+            sd_b_chime_sum = sd(b_chime_sum),
+            mean_pi_chime_sum = mean(pi_chime_sum),
+            sd_pi_chime_sum = sd(pi_chime_sum),
+            mean_pi_pfs_sum = mean(pi_pfs_sum),
+            sd_pi_pfs_sum = sd(pi_pfs_sum))
+print(descriptives)
+```
+
+
+```{r regressions for pre-post proximal outcomes}
+#Hopelessness
+lm_bhs <- lm(pi_bhs_sum ~ b_bhs_sum + Condition, data = included_participants_complete)
+summary(lm_bhs)
+coeftest(lm_bhs, vcov = sandwich)
+coefci(lm_bhs, vcov = sandwich)
+#Significant effect of Condition (p<0.001) in the expected direction (negative)
+
+#Agency
+lm_shs_agency <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + Condition, data = included_participants_complete)
+summary(lm_shs_agency)
+coeftest(lm_shs_agency, vcov = sandwich)
+coefci(lm_shs_agency, vcov = sandwich)
+#Significant effect of Condition (p<0.05) in the expected direction (positive)
+
+#Body image state
+lm_biss <- lm(pi_biss_sum ~ b_biss_sum + Condition, data = included_participants_complete)
+summary(lm_biss)
+coeftest(lm_biss, vcov = sandwich)
+coefci(lm_biss, vcov = sandwich)
+#Significant effect of Condition (p<0.001) in the expected direction (positive)
+
+#Functionality appreciation 
+lm_fas <- lm(pi_fas_sum ~ b_fas_sum + Condition, data = included_participants_complete)
+summary(lm_fas)
+coeftest(lm_fas, vcov = sandwich)
+coefci(lm_fas, vcov = sandwich)
+#Significant effect of Condition (p<0.001) in the expected direction (positive)
+
+#Body image flexibility - EXPLORATORY
+lm_biaaq <- lm(pi_biaaq_sum ~ b_biaaq_sum + Condition, data = included_participants_complete)
+summary(lm_biaaq)
+coeftest(lm_biaaq, vcov = sandwich)
+coefci(lm_biaaq, vcov = sandwich)
+#Significant effect of Condition (p<0.05) in the expected direction (positive)
+
+#Body-related mindfulness - EXPLORATORY
+lm_chime <- lm(pi_chime_sum ~ b_chime_sum + Condition, data = included_participants_complete)
+summary(lm_chime)
+coeftest(lm_chime, vcov = sandwich)
+coefci(lm_chime, vcov = sandwich)
+#No significant effect of Condition (p>0.05)
+```
+
+```{r regression assumptions}
+#Multicollinearity - sqrt should be <2
+sqrt(vif(lm_bhs))
+sqrt(vif(lm_shs_agency))
+sqrt(vif(lm_biss))
+sqrt(vif(lm_fas))
+sqrt(vif(lm_biaaq))
+sqrt(vif(lm_chime))
+#All pass
+
+#Linearity of data
+plot(lm_bhs, 1)
+plot(lm_shs_agency, 1)
+plot(lm_biss, 1)
+plot(lm_fas, 1)
+plot(lm_biaaq, 1)
+plot(lm_chime, 1)
+#I think most of these look ok, maybe square predictors to fix?
+
+#Independence of predictors - p should be > 0.05
+durbinWatsonTest(lm_bhs)
+durbinWatsonTest(lm_shs_agency)
+durbinWatsonTest(lm_biss)
+durbinWatsonTest(lm_fas) #Hit or miss
+durbinWatsonTest(lm_biaaq)
+durbinWatsonTest(lm_chime) #Hit or miss
+
+#Homoscedasticity - p should be > 0.05 for ncv and bp - we are accounting for the issue this by using the sandwich package above
+plot(lm_bhs, 3) 
+plot(lm_shs_agency, 3)
+plot(lm_biss, 3) 
+plot(lm_fas, 3)
+plot(lm_biaaq, 3)
+plot(lm_chime, 3)
+ncvTest(lm_bhs) 
+ncvTest(lm_shs_agency)
+ncvTest(lm_biss)
+ncvTest(lm_fas) 
+ncvTest(lm_biaaq)
+ncvTest(lm_chime)
+bptest(lm_bhs)
+bptest(lm_shs_agency)
+bptest(lm_biss)
+bptest(lm_fas) 
+bptest(lm_biaaq)
+bptest(lm_chime)
+
+#Normality of residual errors
+ols_plot_resid_qq(lm_bhs)
+ols_plot_resid_qq(lm_shs_agency) 
+ols_plot_resid_qq(lm_biss)
+ols_plot_resid_qq(lm_fas)
+ols_plot_resid_qq(lm_biaaq)
+ols_plot_resid_qq(lm_chime)
+#Some of the residuals are more extreme 
+```
+
+```{r calculating effect sizes}
+
+#First, calculate descriptives for change scores
+
+##Hopelessness for PBN
+pbn_bhs_stats <- pbn_complete %>%
+  select(b_bhs_sum, pi_bhs_sum) %>%
+  mutate(bhs_sum_change = pi_bhs_sum - b_bhs_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Hopelessness for Control
+control_bhs_stats <- control_complete %>%
+  select(b_bhs_sum, pi_bhs_sum) %>%
+  mutate(bhs_sum_change = pi_bhs_sum - b_bhs_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Agency for PBN
+pbn_shs_agency_stats <- pbn_complete %>%
+  select(b_shs_agency_sum, pi_shs_agency_sum) %>%
+  mutate(shs_agency_sum_change = pi_shs_agency_sum - b_shs_agency_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Agency for Control
+control_shs_agency_stats <- control_complete %>%
+  select(b_shs_agency_sum, pi_shs_agency_sum) %>%
+  mutate(shs_agency_sum_change = pi_shs_agency_sum - b_shs_agency_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Body image state for PBN
+pbn_biss_stats <- pbn_complete %>%
+  select(b_biss_sum, pi_biss_sum) %>%
+  mutate(biss_sum_change = pi_biss_sum - b_biss_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Body image state for Control
+control_biss_stats <- control_complete %>%
+  select(b_biss_sum, pi_biss_sum) %>%
+  mutate(biss_sum_change = pi_biss_sum - b_biss_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Functionality appreciation for PBN
+pbn_fas_stats <- pbn_complete %>%
+  select(b_fas_sum, pi_fas_sum) %>%
+  mutate(fas_sum_change = pi_fas_sum - b_fas_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Functionality appreciation for Control
+control_fas_stats <- control_complete %>%
+  select(b_fas_sum, pi_fas_sum) %>%
+  mutate(fas_sum_change = pi_fas_sum - b_fas_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Body image flexibility for PBN
+pbn_biaaq_stats <- pbn_complete %>%
+  select(b_biaaq_sum, pi_biaaq_sum) %>%
+  mutate(biaaq_sum_change = pi_biaaq_sum - b_biaaq_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Body image flexibility for Control
+control_biaaq_stats <- control_complete %>%
+  select(b_biaaq_sum, pi_biaaq_sum) %>%
+  mutate(biaaq_sum_change = pi_biaaq_sum - b_biaaq_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Body-related mindfulness for PBN
+pbn_chime_stats <- pbn_complete %>%
+  select(b_chime_sum, pi_chime_sum) %>%
+  mutate(chime_sum_change = pi_chime_sum - b_chime_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+##Body-related mindfulness for Control
+control_chime_stats <- control_complete %>%
+  select(b_chime_sum, pi_chime_sum) %>%
+  mutate(chime_sum_change = pi_chime_sum - b_chime_sum) %>%
+  summarize(n = n(),
+            across(everything(), list(mean = mean, sd = sd))) 
+
+#Within-person effect sizes
+
+##Hopelessness for PBN
+d.dep.t.avg(m1 = pbn_bhs_stats$b_bhs_sum_mean,
+            m2 = pbn_bhs_stats$pi_bhs_sum_mean,
+            sd1 = pbn_bhs_stats$b_bhs_sum_sd,
+            sd2 = pbn_bhs_stats$pi_bhs_sum_sd,
+            n = pbn_bhs_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Hopelessness for Control
+d.dep.t.avg(m1 = control_bhs_stats$b_bhs_sum_mean,
+            m2 = control_bhs_stats$pi_bhs_sum_mean,
+            sd1 = control_bhs_stats$b_bhs_sum_sd,
+            sd2 = control_bhs_stats$pi_bhs_sum_sd,
+            n = control_bhs_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Agency for PBN
+d.dep.t.avg(m1 = pbn_shs_agency_stats$b_shs_agency_sum_mean,
+            m2 = pbn_shs_agency_stats$pi_shs_agency_sum_mean,
+            sd1 = pbn_shs_agency_stats$b_shs_agency_sum_sd,
+            sd2 = pbn_shs_agency_stats$pi_shs_agency_sum_sd,
+            n = pbn_shs_agency_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Agency for Control
+d.dep.t.avg(m1 = control_shs_agency_stats$b_shs_agency_sum_mean,
+            m2 = control_shs_agency_stats$pi_shs_agency_sum_mean,
+            sd1 = control_shs_agency_stats$b_shs_agency_sum_sd,
+            sd2 = control_shs_agency_stats$pi_shs_agency_sum_sd,
+            n = control_shs_agency_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Body image state for PBN
+d.dep.t.avg(m1 = pbn_biss_stats$b_biss_sum_mean,
+            m2 = pbn_biss_stats$pi_biss_sum_mean,
+            sd1 = pbn_biss_stats$b_biss_sum_sd,
+            sd2 = pbn_biss_stats$pi_biss_sum_sd,
+            n = pbn_biss_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Body image state for Control
+d.dep.t.avg(m1 = control_biss_stats$b_biss_sum_mean,
+            m2 = control_biss_stats$pi_biss_sum_mean,
+            sd1 = control_biss_stats$b_biss_sum_sd,
+            sd2 = control_biss_stats$pi_biss_sum_sd,
+            n = control_biss_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Functionality appreciation for PBN
+d.dep.t.avg(m1 = pbn_fas_stats$b_fas_sum_mean,
+            m2 = pbn_fas_stats$pi_fas_sum_mean,
+            sd1 = pbn_fas_stats$b_fas_sum_sd,
+            sd2 = pbn_fas_stats$pi_fas_sum_sd,
+            n = pbn_fas_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Functionality appreciation for Control
+d.dep.t.avg(m1 = control_fas_stats$b_fas_sum_mean,
+            m2 = control_fas_stats$pi_fas_sum_mean,
+            sd1 = control_fas_stats$b_fas_sum_sd,
+            sd2 = control_fas_stats$pi_fas_sum_sd,
+            n = control_fas_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Body image flexibility for PBN
+d.dep.t.avg(m1 = pbn_biaaq_stats$b_biaaq_sum_mean,
+            m2 = pbn_biaaq_stats$pi_biaaq_sum_mean,
+            sd1 = pbn_biaaq_stats$b_biaaq_sum_sd,
+            sd2 = pbn_biaaq_stats$pi_biaaq_sum_sd,
+            n = pbn_biaaq_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Body image flexibility for Control
+d.dep.t.avg(m1 = control_biaaq_stats$b_biaaq_sum_mean,
+            m2 = control_biaaq_stats$pi_biaaq_sum_mean,
+            sd1 = control_biaaq_stats$b_biaaq_sum_sd,
+            sd2 = control_biaaq_stats$pi_biaaq_sum_sd,
+            n = control_biaaq_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Body-related mindfulness for PBN
+d.dep.t.avg(m1 = pbn_chime_stats$b_chime_sum_mean,
+            m2 = pbn_chime_stats$pi_chime_sum_mean,
+            sd1 = pbn_chime_stats$b_chime_sum_sd,
+            sd2 = pbn_chime_stats$pi_chime_sum_sd,
+            n = pbn_chime_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+##Body-related mindfulness for Control
+d.dep.t.avg(m1 = control_chime_stats$b_chime_sum_mean,
+            m2 = control_chime_stats$pi_chime_sum_mean,
+            sd1 = control_chime_stats$b_chime_sum_sd,
+            sd2 = control_chime_stats$pi_chime_sum_sd,
+            n = control_chime_stats$n,
+            a = .05) %>%
+  pluck("estimate")
+
+#Between-person effect sizes
+
+##Hopelessness
+d.ind.t(m1 = pbn_bhs_stats$bhs_sum_change_mean, 
+        m2 = control_bhs_stats$bhs_sum_change_mean, 
+        sd1 = pbn_bhs_stats$bhs_sum_change_sd, 
+        sd2 = control_bhs_stats$bhs_sum_change_sd, 
+        n1 = pbn_bhs_stats$n, 
+        n2 = control_bhs_stats$n, 
+        a = 0.05) %>%
+  pluck("estimate")
+
+##Agency
+d.ind.t(m1 = pbn_shs_agency_stats$shs_agency_sum_change_mean, 
+        m2 = control_shs_agency_stats$shs_agency_sum_change_mean, 
+        sd1 = pbn_shs_agency_stats$shs_agency_sum_change_sd, 
+        sd2 = control_shs_agency_stats$shs_agency_sum_change_sd, 
+        n1 = pbn_shs_agency_stats$n, 
+        n2 = control_shs_agency_stats$n, 
+        a = 0.05) %>%
+  pluck("estimate")
+
+##Body image state
+d.ind.t(m1 = pbn_biss_stats$biss_sum_change_mean, 
+        m2 = control_biss_stats$biss_sum_change_mean, 
+        sd1 = pbn_biss_stats$biss_sum_change_sd, 
+        sd2 = control_biss_stats$biss_sum_change_sd, 
+        n1 = pbn_biss_stats$n, 
+        n2 = control_biss_stats$n, 
+        a = 0.05) %>%
+  pluck("estimate")
+
+##Functionality appreciation
+d.ind.t(m1 = pbn_fas_stats$fas_sum_change_mean, 
+        m2 = control_fas_stats$fas_sum_change_mean, 
+        sd1 = pbn_fas_stats$fas_sum_change_sd, 
+        sd2 = control_fas_stats$fas_sum_change_sd, 
+        n1 = pbn_fas_stats$n, 
+        n2 = control_fas_stats$n, 
+        a = 0.05) %>%
+  pluck("estimate")
+
+##Body image flexibility
+d.ind.t(m1 = pbn_biaaq_stats$biaaq_sum_change_mean, 
+        m2 = control_biaaq_stats$biaaq_sum_change_mean, 
+        sd1 = pbn_biaaq_stats$biaaq_sum_change_sd, 
+        sd2 = control_biaaq_stats$biaaq_sum_change_sd, 
+        n1 = pbn_biaaq_stats$n, 
+        n2 = control_biaaq_stats$n, 
+        a = 0.05) %>%
+  pluck("estimate")
+
+##Body-related mindfulness
+d.ind.t(m1 = pbn_chime_stats$chime_sum_change_mean, 
+        m2 = control_chime_stats$chime_sum_change_mean, 
+        sd1 = pbn_chime_stats$chime_sum_change_sd, 
+        sd2 = control_chime_stats$chime_sum_change_sd, 
+        n1 = pbn_chime_stats$n, 
+        n2 = control_chime_stats$n, 
+        a = 0.05) %>%
+  pluck("estimate")
+```
+
+```{r acceptability}
+#Check if there are differences in total PFS
+t.test(pbn_complete$pi_pfs_sum, control_complete$pi_pfs_sum)
+#Significant differences in favor of PBN
+
+#Individual items for control participants
+control_complete %>%
+  select(pi_pfs_1:pi_pfs_7) %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarize(mean = mean(value),
+            sd = sd(value))
+
+#Individual items for intervention participants
+pbn_complete %>%
+  select(pi_pfs_1:pi_pfs_7) %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarize(mean = mean(value),
+            sd = sd(value))
+```
+
+```{r demographics}
+#Age
+included_participants_complete %>%
+  count(b_dem_age) %>%
+  mutate(percent = (n / sum(n))*100)
+
+#SAAB
+included_participants_complete %>%
+  count(b_dem_sex) %>%
+  mutate(percent = (n / sum(n))*100)
+
+#Gender
+included_participants_complete %>%
+  mutate(b_dem_gender = factor(b_dem_gender, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "14", "15", "16"))) %>%
+  count(b_dem_gender) %>%
+  mutate(percent_of_sample = n / sum(n) * 100) %>%
+  arrange(b_dem_gender)
+
+#Sexual orientation
+included_participants_complete %>%
+count(b_dem_sexuality) %>%
+  mutate(percent = (n / sum(n))*100)
+
+#Race
+included_participants_complete %>%
+  select(starts_with("b_dem_race_ethnicity")) %>%
+  select(-b_dem_race_ethnicity_7_TEXT) %>%
+  replace(is.na(.), 0) %>% #NAs are 0
+  mutate(across(starts_with("b_dem_race_ethnicity"), as.numeric)) %>%
+  pivot_longer(cols = starts_with("b_dem_race_ethnicity"), names_to = "column") %>%
+  count(column, value)  %>%
+  mutate(percent = n / sum(n) * 100)
+```
