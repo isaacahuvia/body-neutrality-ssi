@@ -23,6 +23,10 @@ if(!require(sandwich)){install.packages('sandwich')}
 library(sandwich)
 if(!require(MOTE)){install.packages('MOTE')}
 library(MOTE)
+if(!require(openxlsx)){install.packages('openxlsx')}
+library(openxlsx)
+if(!require(missForest)){install.packages('missForest')}
+library(missForest)
 
 #Set working directory
 setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline)")
@@ -44,13 +48,11 @@ original_survey_data <- original_survey_data %>%
   select(-Q_AmbiguousTextPresent, -Q_AmbiguousTextQuestions)
 
 ##Now we can merge
-merged_data <- rbind(original_survey_data, new_survey_data)
+merged_data <- bind_rows(original_survey_data, new_survey_data)
 
-#Create a binary variable for Condition# where 0 = Control and 1 = Intervention
+#Create a binary variable to identify the treatment group
 merged_data <- merged_data %>%
-  mutate(Condition = case_when(
-    Condition == "Control" ~ 0,
-    Condition == "Intervention" ~ 1))
+  mutate(treatment_group = Condition == "Intervention")
 
 #Select the participants being included in analysis (per data integrity checks, should be N=220)
 included_participants <- merged_data %>%
@@ -59,114 +61,127 @@ included_participants <- merged_data %>%
 #Make necessary variables numeric
 included_participants <- included_participants %>%
   mutate(across(
-    starts_with(c("b_bhs_", "pi_bhs_", "b_shs_agency_", "pi_shs_agency_", "b_biss_", "pi_biss_", "b_fas_", "pi_fas_", "b_biaaq_", "pi_biaaq_", "b_chime_", "pi_chime_", "pi_pfs_1", "pi_pfs_2", "pi_pfs_3", "pi_pfs_4", "pi_pfs_5", "pi_pfs_6", "pi_pfs_7")),
+    starts_with(c("b_bhs_", "pi_bhs_", "b_shs_agency_", "pi_shs_agency_", "b_biss_", "pi_biss_", "b_fas_", "pi_fas_", "b_biaaq_", "pi_biaaq_", "b_chime_", "pi_chime_", "pi_pfs_1", "pi_pfs_2", "pi_pfs_3", "pi_pfs_4", "pi_pfs_5", "pi_pfs_6", "pi_pfs_7", "b_mfq_", "b_edeq_")),
     as.numeric
   ))
 
-#Create scores and filter for complete cases only
+#Create score and filter for program feedback completers
+included_participants_pfs <- included_participants %>%
+  mutate(pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7) %>%
+  filter(!is.na(pi_pfs_sum))
+
+#Identify participants with greater than 5% missing baseline primary outcomes data
+#For each participant, add a new column that calculates the total number of baseline primary outcome items answered by each participant 
+included_participants <- included_participants %>%
+  mutate(total_responses_bprimary = rowSums(
+    !is.na(select(included_participants, b_mfq_1, b_mfq_2, b_mfq_3, b_mfq_4, b_mfq_5, b_mfq_6, b_mfq_7, b_mfq_8, b_mfq_9, b_mfq_10, b_mfq_11, b_mfq_12, b_mfq_13, b_edeq_1, b_edeq_2, b_edeq_3, b_edeq_4, b_edeq_5, b_edeq_6, b_edeq_7, b_edeq_8, b_edeq_9, b_edeq_10)), 
+    na.rm = TRUE))
+#For each participant, calculate the percent of missing responses (there are 23 items total)
+included_participants <- included_participants %>%
+   mutate(percent_missing = (1 - (total_responses_bprimary / 23)) * 100) 
+#Make a new variable that identifies participants with more than 5% missing data (those with more than 5% missing are TRUE)
+included_participants <- included_participants %>%
+  mutate(more_than_5_percent_missing = percent_missing > 5)
+#Remove participants where more_than_5_percent_missing is TRUE
+included_participants <- included_participants %>%
+  filter(!more_than_5_percent_missing)
+#In sum, there were originally 220 included_participants and now there are 218 (only had to drop two participants prior to imputation)
+```
+
+```{r imputation}
+set.seed(12345) #use the same seed number each time to make the code reproducible (the seed number is just the starting point used in the generation of a sequence of random numbers in the random forest)
+
+#Select the data needed for imputation (the outcome variables themselves and the variables that will go into the algorith WHICH I NEED TO ADD)
+variables_for_imputation <- included_participants %>%
+  select( b_mfq_1, b_mfq_2, b_mfq_3, b_mfq_4, b_mfq_5, b_mfq_6, b_mfq_7, b_mfq_8, b_mfq_9, b_mfq_10, b_mfq_11, b_mfq_12, b_mfq_13, b_edeq_1, b_edeq_2, b_edeq_3, b_edeq_4, b_edeq_5, b_edeq_6, b_edeq_7, b_edeq_8, b_edeq_9, b_edeq_10)
+
+imputed_data <- missForest(variables_for_imputation)
+imputed_data <- as.data.frame(imputed_data$ximp)
+imputed_data <- round(imputed_data) #Since the algorithm introduces decimals which is not appropriate for this data, round to the nearest whole number
+```
+
+```{r scoring and create specific data frames}
+#Create scores and filter for proximal outcomes completers 
+#NOTE TO SELF: Since we will be imputing data for anyone with less than 5% missing on the baseline PRIMARY outcomes, filtering for complete cases here might eventually not be necessary. Rather, will just use this to get sum scores. Will likely need to change object name and/or use a different dataframe throughout (with more complete data) once imputation is done. Complete, non-imputed cases will likely only be used for a robustness check. 
 included_participants_complete <- included_participants %>%
   mutate(b_bhs_sum = b_bhs_1 + b_bhs_2 + b_bhs_3 + b_bhs_4,
          pi_bhs_sum = pi_bhs_1 + pi_bhs_2 + pi_bhs_3 + pi_bhs_4,
          b_shs_agency_sum = b_shs_agency_1 + b_shs_agency_2 + b_shs_agency_3,
          pi_shs_agency_sum = pi_shs_agency_1 + pi_shs_agency_2 + pi_shs_agency_3,
          b_biss_sum = b_biss_1 + b_biss_2 + b_biss_3 + b_biss_4 +  b_biss_5 + b_biss_6, #items 2, 4, and 6 are already reverse-scored in Qualtrics
-         pi_biss_sum = pi_biss_1 + (pi_biss_2) + pi_biss_3 + (pi_biss_4) +  pi_biss_5 + pi_biss_6, #items 2, 4, and 6 are already reverse-scored in Qualtrics
+         pi_biss_sum = pi_biss_1 + pi_biss_2 + pi_biss_3 + pi_biss_4 +  pi_biss_5 + pi_biss_6, #items 2, 4, and 6 are already reverse-scored in Qualtrics
          b_fas_sum = b_fas_1 + b_fas_2 + b_fas_3 + b_fas_4 + b_fas_5 + b_fas_6 + b_fas_7,
          pi_fas_sum = pi_fas_1 + pi_fas_2 + pi_fas_3 + pi_fas_4 + pi_fas_5 + pi_fas_6 + pi_fas_7,
          b_biaaq_sum = b_biaaq_1 + b_biaaq_2 + b_biaaq_3 + b_biaaq_4 + b_biaaq_5 + b_biaaq_6 + b_biaaq_7 + b_biaaq_8 + b_biaaq_9 + b_biaaq_10 + b_biaaq_11 + b_biaaq_12, #all items are already reverse-scored in Qualtrics
          pi_biaaq_sum = pi_biaaq_1 + pi_biaaq_2 + pi_biaaq_3 + pi_biaaq_4 + pi_biaaq_5 + pi_biaaq_6 + pi_biaaq_7 + pi_biaaq_8 + pi_biaaq_9 + pi_biaaq_10 + pi_biaaq_11 + pi_biaaq_12, #all items are already reverse-scored in Qualtrics
          b_chime_sum = b_chime_1 + b_chime_2 + b_chime_3, #item 3 is already reverse-scored in Qualtrics
-         pi_chime_sum = pi_chime_1 + pi_chime_2 + pi_chime_3, #item 3 is already reverse-scored in Qualtrics
-         pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7) %>%
+         pi_chime_sum = pi_chime_1 + pi_chime_2 + pi_chime_3,
+         pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7) %>% #item 3 is already reverse-scored in Qualtrics
 filter(complete.cases(.))
 #N=187
 
 #Create a dataframe with complete PBN participants only
 pbn_complete <- included_participants_complete %>%
-  filter(Condition == 1)
-#N=91
+  filter(treatment_group == TRUE)
+#N=96
 
 #Create a dataframe with complete Control participants only
 control_complete <- included_participants_complete %>%
-  filter(Condition == 0)
-#N=96
+  filter(treatment_group == FALSE)
+#N=91
 ```
 
 ```{r descriptives}
 descriptives <- included_participants_complete %>%
-  group_by(Condition) %>%
-  summarize(mean_b_bhs_sum = mean(b_bhs_sum),
-            sd_b_bhs_sum = sd(b_bhs_sum),
-            mean_pi_bhs_sum = mean(pi_bhs_sum),
-            sd_pi_bhs_sum = sd(pi_bhs_sum),
-            mean_b_shs_agency_sum = mean(b_shs_agency_sum),
-            sd_b_shs_agency_sum = sd(b_shs_agency_sum),
-            mean_pi_shs_agency_sum = mean(pi_shs_agency_sum),
-            sd_pi_shs_agency_sum = sd(pi_shs_agency_sum),
-            mean_b_biss_sum = mean(b_biss_sum),
-            sd_b_biss_sum = sd(b_biss_sum),
-            mean_pi_biss_sum = mean(pi_biss_sum),
-            sd_pi_biss_sum = sd(pi_biss_sum),
-            mean_b_fas_sum = mean(b_fas_sum),
-            sd_b_fas_sum = sd(b_fas_sum),
-            mean_pi_fas_sum = mean(pi_fas_sum),
-            sd_pi_fas_sum = sd(pi_fas_sum),
-            mean_b_biaaq_sum = mean(b_biaaq_sum),
-            sd_b_biaaq_sum = sd(b_biaaq_sum),
-            mean_pi_biaaq_sum = mean(pi_biaaq_sum),
-            sd_pi_biaaq_sum = sd(pi_biaaq_sum),
-            mean_b_chime_sum = mean(b_chime_sum),
-            sd_b_chime_sum = sd(b_chime_sum),
-            mean_pi_chime_sum = mean(pi_chime_sum),
-            sd_pi_chime_sum = sd(pi_chime_sum),
-            mean_pi_pfs_sum = mean(pi_pfs_sum),
-            sd_pi_pfs_sum = sd(pi_pfs_sum))
+  group_by(treatment_group) %>%
+  summarize(across(c(b_bhs_sum, pi_bhs_sum, b_shs_agency_sum, pi_shs_agency_sum, b_biss_sum, pi_biss_sum, b_fas_sum, pi_fas_sum, b_biaaq_sum, pi_biaaq_sum, b_chime_sum, pi_chime_sum, pi_pfs_sum), 
+                   list(mean = mean, sd = sd)))
 print(descriptives)
 ```
 
 
 ```{r regressions for pre-post proximal outcomes}
 #Hopelessness
-lm_bhs <- lm(pi_bhs_sum ~ b_bhs_sum + Condition, data = included_participants_complete)
+lm_bhs <- lm(pi_bhs_sum ~ b_bhs_sum + treatment_group, data = included_participants_complete)
 summary(lm_bhs)
 coeftest(lm_bhs, vcov = sandwich)
 coefci(lm_bhs, vcov = sandwich)
-#Significant effect of Condition (p<0.001) in the expected direction (negative)
+#Significant effect of treatment_group (p<0.001) in the expected direction (negative)
 
 #Agency
-lm_shs_agency <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + Condition, data = included_participants_complete)
+lm_shs_agency <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + treatment_group, data = included_participants_complete)
 summary(lm_shs_agency)
 coeftest(lm_shs_agency, vcov = sandwich)
 coefci(lm_shs_agency, vcov = sandwich)
-#Significant effect of Condition (p<0.05) in the expected direction (positive)
+#Significant effect of treatment_group (p<0.05) in the expected direction (positive)
 
 #Body image state
-lm_biss <- lm(pi_biss_sum ~ b_biss_sum + Condition, data = included_participants_complete)
+lm_biss <- lm(pi_biss_sum ~ b_biss_sum + treatment_group, data = included_participants_complete)
 summary(lm_biss)
 coeftest(lm_biss, vcov = sandwich)
 coefci(lm_biss, vcov = sandwich)
-#Significant effect of Condition (p<0.001) in the expected direction (positive)
+#Significant effect of treatment_group (p<0.001) in the expected direction (positive)
 
 #Functionality appreciation 
-lm_fas <- lm(pi_fas_sum ~ b_fas_sum + Condition, data = included_participants_complete)
+lm_fas <- lm(pi_fas_sum ~ b_fas_sum + treatment_group, data = included_participants_complete)
 summary(lm_fas)
 coeftest(lm_fas, vcov = sandwich)
 coefci(lm_fas, vcov = sandwich)
-#Significant effect of Condition (p<0.001) in the expected direction (positive)
+#Significant effect of treatment_group (p<0.001) in the expected direction (positive)
 
 #Body image flexibility - EXPLORATORY
-lm_biaaq <- lm(pi_biaaq_sum ~ b_biaaq_sum + Condition, data = included_participants_complete)
+lm_biaaq <- lm(pi_biaaq_sum ~ b_biaaq_sum + treatment_group, data = included_participants_complete)
 summary(lm_biaaq)
 coeftest(lm_biaaq, vcov = sandwich)
 coefci(lm_biaaq, vcov = sandwich)
-#Significant effect of Condition (p<0.05) in the expected direction (positive)
+#Significant effect of treatment_group (p<0.05) in the expected direction (positive)
 
 #Body-related mindfulness - EXPLORATORY
-lm_chime <- lm(pi_chime_sum ~ b_chime_sum + Condition, data = included_participants_complete)
+lm_chime <- lm(pi_chime_sum ~ b_chime_sum + treatment_group, data = included_participants_complete)
 summary(lm_chime)
 coeftest(lm_chime, vcov = sandwich)
 coefci(lm_chime, vcov = sandwich)
-#No significant effect of Condition (p>0.05)
+#No significant effect of treatment_group (p>0.05)
 ```
 
 ```{r regression assumptions}
@@ -507,6 +522,31 @@ pbn_complete %>%
   group_by(name) %>%
   summarize(mean = mean(value),
             sd = sd(value))
+
+#N and percent of intervention participants with sum score >3, reflect overall perceived SSI acceptability
+included_participants_pfs %>%
+  filter(treatment_group == TRUE) %>%
+  mutate(pi_pfs_sum_scores = pi_pfs_sum / 7) %>%
+  mutate(pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
+  summarise(
+    pi_pfs_sum_scores_acceptable_number = sum(pi_pfs_sum_scores_acceptable),
+    pi_pfs_sum_scores_acceptable_percent = (pi_pfs_sum_scores_acceptable_number * 100) / n()
+  )
+```
+
+```{open-ended responses}
+#Help seeking and unmet treatment for the full included sample, regardless of completion or randomization
+qual_help_seeking <- included_participants %>% 
+  select(Participant_ID, b_unmet_mood_free_1, b_unmet_mood_free_2, b_unmet_ed_free_1, b_unmet_ed_free_2)
+flextable::flextable(qual_help_seeking, cwidth = c(0.5,7,0.5))
+#write.xlsx(qual_help_seeking, "qual_help_seeking.xlsx")
+
+#Program feedback for the intervention group
+pfs_qual_intervention <- included_participants_pfs %>%
+  filter(treatment_group == TRUE) %>%
+   select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)
+flextable::flextable(pfs_qual_intervention, cwidth = c(0.5,7,0.5))
+#write.xlsx(pfs_qual_intervention, "pfs_qual_intervention.xlsx")
 ```
 
 ```{r demographics}
