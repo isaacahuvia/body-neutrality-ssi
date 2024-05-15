@@ -27,6 +27,8 @@ if(!require(openxlsx)){install.packages('openxlsx')}
 library(openxlsx)
 if(!require(missForest)){install.packages('missForest')}
 library(missForest)
+if(!require(visdat)){install.packages('visdat')}
+library(visdat)
 
 #Set working directory
 setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline)")
@@ -34,51 +36,117 @@ setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/
 #Load data
 original_survey_data <- read.csv("original_survey_data.csv")
 new_survey_data <- read.csv("new_survey_data.csv")
+followup_data <- read.csv("followups_5.9.24.csv") 
+###WILL NEED TO UPDATE WITH FULL SAMPLE###
 ```
 
 ```{r merge and clean data}
 #Merge original_survey_data (closed because of frauds) and new_survey_data
 
-##original_survey_data has 731 columns but new_survey_data has 729. Figure out the 2 differences
+#original_survey_data has 731 columns but new_survey_data has 729. Figure out the 2 differences
 cols_in_original_only <- setdiff(names(original_survey_data), names(new_survey_data))
 print(cols_in_original_only)
 
-##Remove the 2 extra Qualtrics columns from original_survey_data (won't mess things up because they are at the end and don't have anything important)
+#Remove the 2 extra Qualtrics columns from original_survey_data (won't mess things up because they are at the end and don't have anything important)
 original_survey_data <- original_survey_data %>%
   select(-Q_AmbiguousTextPresent, -Q_AmbiguousTextQuestions)
 
-##Now we can merge
+#Now we can merge
 merged_data <- bind_rows(original_survey_data, new_survey_data)
 
-#Create a binary variable to identify the treatment group
-merged_data <- merged_data %>%
-  mutate(treatment_group = Condition == "Intervention")
-
-#Select the participants being included in analysis (per data integrity checks, should be N=220)
+#In the baseline data, select the participants being included in analysis (per data integrity checks, should be N=220)
 included_participants <- merged_data %>%
   filter(Participant_ID %in% c(40077, 15186, 11697, 95674, 40889, 84608, 61437, 16432, 22485, 24378, 21140, 58776, 13649, 83679, 62516, 52326, 20457, 39455, 64886, 35756, 65322, 86883, 72424, 92104, 33504, 38713, 96986, 28301, 14617, 14806, 93863, 13842, 31849, 74139, 53775, 57712, 96120, 49399, 45841, 40397, 75164, 71675, 30277, 58650, 18169, 41917, 50884, 70371, 48434, 18974, 18856, 17231, 56049, 68213, 93764, 15333, 98726, 80569, 63962, 66481, 40376, 83329, 90314, 59978, 66920, 35067, 15025, 77121, 89229, 82287, 96711, 11308, 53611, 57517, 47321, 43097, 74462, 11290, 49908, 24314, 69311, 70500, 49864, 69898, 74951, 38601, 60126, 26551, 58830, 21592, 17149, 31067, 39743, 71511, 45789, 84417, 56534, 98233, 84267, 68200, 76371, 45565, 48031, 19978, 25987, 38488, 25643, 86804, 86300, 18348, 90947, 53863, 17032, 60501, 27455, 62781, 88241, 55765, 39606, 66912, 67236, 11868, 68267, 35553, 95389, 80941, 15777, 53969, 95004, 43258, 64019, 99949, 72626, 47331, 50401, 96007, 65187, 31188, 93980, 76870, 32309, 85411, 85344, 48970, 54988, 49034, 77719, 78040, 86763, 33280, 23158, 87771, 21842, 19199, 96320, 64719, 78881, 49236, 26869, 65509, 38538, 73614, 80888, 55845, 86114, 22584, 81514, 92289, 86314, 65863, 77450, 25638, 88046, 99374, 13638, 35047, 38572, 26776, 86023, 43295, 20973, 53220, 29614, 62193, 42215, 41799, 93664, 50466, 78161, 85350, 87127, 15065, 11827, 63743, 20364, 17670, 44268, 48593, 96225, 71632, 97410, 90795, 49102, 68198, 16855, 64531, 13302, 57955, 21313, 13023, 69913, 75263, 93022, 48022, 22684, 17052, 72038, 56590, 56815, 76432))
 
-#Make necessary variables numeric
-included_participants <- included_participants %>%
-  mutate(across(
-    starts_with(c("b_bhs_", "pi_bhs_", "b_shs_agency_", "pi_shs_agency_", "b_biss_", "pi_biss_", "b_fas_", "pi_fas_", "b_biaaq_", "pi_biaaq_", "b_chime_", "pi_chime_", "pi_pfs_1", "pi_pfs_2", "pi_pfs_3", "pi_pfs_4", "pi_pfs_5", "pi_pfs_6", "pi_pfs_7", "b_mfq_", "b_edeq_")),
-    as.numeric
-  ))
+#In the follow-up data, select the included participants who have completed follow-up 
+###WILL NEED TO UPDATE WITH FULL SAMPLE###
+followup_data <- followup_data %>%
+  filter(Participant_ID %in% c(40077, 15186, 11697, 95674,40889, 84608, 61437, 16432, 21140, 58776, 62516, 20457, 39455, 35756, 65322, 72424, 38713, 96986, 28301, 14617, 14806, 93863, 13842, 31849, 57712, 45841, 40397, 75164, 71675, 58650, 41917, 50884, 48434, 18856, 17231, 56049, 68213, 93764, 15333, 98726, 80569, 63962, 40376, 83329, 90314, 59978, 66920, 35067, 89229, 82287, 96711, 11308, 53611, 57517, 74462, 24314, 69898, 74951, 38601, 60126, 58830, 17149, 31067, 98233, 84267, 45565, 48031, 19978, 25987, 38488, 86804, 86300, 18348, 17032, 60501, 88241, 39606, 67236, 11868,68267, 35553, 95389))
+#As of 5/9/24 compensation, this should only be N=82, but there are 105 rows because of duplicates. Get rid of duplicates (keeping the one with the most Progress, and if Progress is 100 for multiple, keeping most recent by RecordedDate). 
+###NEED TO CHECK THIS WORK###
+followup_data <- followup_data %>%
+  arrange(Participant_ID, desc(Progress), RecordedDate)
+followup_data <- followup_data %>%
+  distinct(Participant_ID, .keep_all = TRUE)
 
-#Create score and filter for program feedback completers
-included_participants_pfs <- included_participants %>%
+#Add the follow-up data to the baseline data. 
+###NEED TO CHECK THIS WORK###
+included_participants <- included_participants %>%
+  left_join(followup_data, by = "Participant_ID")
+
+#Create a binary variable to identify the treatment group
+included_participants <- included_participants %>%
+  mutate(treatment_group = Condition == "Intervention")
+
+#Select variables that will be used for analysis / in imputation
+###SINCE REMOVING TIMING AND TEXT-BASED VARIABLES, WILL NEED TO LOOK AT SEPERATELY ELSEWHERE###
+###WHAT ELSE SHOULD WE INCLUDE####
+included_participants <- included_participants %>%
+   select(Participant_ID, treatment_group, starts_with(c("b_dem", "b_current", "b_past", "b_unmet", "b_hunger", "b_bhs", "b_shs_agency", "b_biss", "b_fas", "b_biaaq", "b_chime", "b_mfq", "b_edeq", "b_mddi", "pi_pfs", "pi_bhs", "pi_shs_agency", "pi_biss", "pi_fas", "pi_biaaq", "pi_chime", "f_new", "f_bhs", "f_shs_agency", "f_biss", "f_fas", "f_biaaq", "f_chime", "f_mfq", "f_edeq", "f_mddi"))) %>%
+  select(-contains("free"), -contains("TEXT"), -contains("_tim_"), -contains("pfs_like"), -contains("pfs_change"), -contains("pfs_other")) %>%
+  mutate_all(as.numeric)
+###NEED TO CHECK### - mutate_all(as.numeric) produces two warning messages that introduce NAs in b_dem_race_ethnicity and b_dem_gender but I'm not sure why. I am pretty sure missForest() can only work with numeric and categorical variables (meaning I think we have to override variables like treatment_group that were originally logical). Will this cause problems later?
+```
+
+```{r create sum scores}
+#All relevant items are already reverse-scored in Qualtrics
+included_participants <- included_participants %>%
+  mutate(b_bhs_sum = b_bhs_1 + b_bhs_2 + b_bhs_3 + b_bhs_4,
+         pi_bhs_sum = pi_bhs_1 + pi_bhs_2 + pi_bhs_3 + pi_bhs_4,
+         f_bhs_sum = f_bhs_1 + f_bhs_2 + f_bhs_3 + f_bhs_4,
+         b_shs_agency_sum = b_shs_agency_1 + b_shs_agency_2 + b_shs_agency_3,
+         pi_shs_agency_sum = pi_shs_agency_1 + pi_shs_agency_2 + pi_shs_agency_3,
+         f_shs_agency_sum = f_shs_agency_1 + f_shs_agency_2 + f_shs_agency_3,
+         b_biss_sum = b_biss_1 + b_biss_2 + b_biss_3 + b_biss_4 +  b_biss_5 + b_biss_6,
+         pi_biss_sum = pi_biss_1 + pi_biss_2 + pi_biss_3 + pi_biss_4 +  pi_biss_5 + pi_biss_6,
+         f_biss_sum = f_biss_1 + f_biss_2 + f_biss_3 + f_biss_4 +  f_biss_5 + f_biss_6,
+         b_fas_sum = b_fas_1 + b_fas_2 + b_fas_3 + b_fas_4 + b_fas_5 + b_fas_6 + b_fas_7,
+         pi_fas_sum = pi_fas_1 + pi_fas_2 + pi_fas_3 + pi_fas_4 + pi_fas_5 + pi_fas_6 + pi_fas_7,
+         f_fas_sum = f_fas_1 + f_fas_2 + f_fas_3 + f_fas_4 + f_fas_5 + f_fas_6 + f_fas_7,
+         b_biaaq_sum = b_biaaq_1 + b_biaaq_2 + b_biaaq_3 + b_biaaq_4 + b_biaaq_5 + b_biaaq_6 + b_biaaq_7 + b_biaaq_8 + b_biaaq_9 + b_biaaq_10 + b_biaaq_11 + b_biaaq_12,
+         pi_biaaq_sum = pi_biaaq_1 + pi_biaaq_2 + pi_biaaq_3 + pi_biaaq_4 + pi_biaaq_5 + pi_biaaq_6 + pi_biaaq_7 + pi_biaaq_8 + pi_biaaq_9 + pi_biaaq_10 + pi_biaaq_11 + pi_biaaq_12, 
+        f_biaaq_sum = f_biaaq_1 + f_biaaq_2 + f_biaaq_3 + f_biaaq_4 + f_biaaq_5 + f_biaaq_6 + f_biaaq_7 + f_biaaq_8 + f_biaaq_9 + f_biaaq_10 + f_biaaq_11 + f_biaaq_12,
+         b_chime_sum = b_chime_1 + b_chime_2 + b_chime_3,
+         pi_chime_sum = pi_chime_1 + pi_chime_2 + pi_chime_3,
+         f_chime_sum = f_chime_1 + f_chime_2 + f_chime_3,
+         pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7,
+         b_mfq_sum = b_mfq_1 + b_mfq_2 + b_mfq_3 + b_mfq_4 + b_mfq_5 + b_mfq_6 + b_mfq_7 + b_mfq_8 + b_mfq_9 + b_mfq_10 + b_mfq_11 + b_mfq_12 + b_mfq_13, 
+         f_mfq_sum = f_mfq_1 + f_mfq_2 + f_mfq_3 + f_mfq_4 + f_mfq_5 + f_mfq_6 + f_mfq_7 + f_mfq_8 + f_mfq_9 + f_mfq_10 + f_mfq_11 + f_mfq_12 + f_mfq_13,
+         b_edeq_sum = b_edeq_1 + b_edeq_2 + b_edeq_3 + b_edeq_4 + b_edeq_5 + b_edeq_6 + b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10,
+         f_edeq_sum = f_edeq_1 + f_edeq_2 + f_edeq_3 + f_edeq_4 + f_edeq_5 + f_edeq_6 + f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10, 
+         b_mddi_sum = b_mddi_1 + b_mddi_2 + b_mddi_3 + b_mddi_4 + b_mddi_5 + b_mddi_6 + b_mddi_7 + b_mddi_8 + b_mddi_9 + b_mddi_10 + b_mddi_11 + b_mddi_12 + b_mddi_13,
+         f_mddi_sum = f_mddi_1 + f_mddi_2 + f_mddi_3 + f_mddi_4 + f_mddi_5 + f_mddi_6 + f_mddi_7 + f_mddi_8 + f_mddi_9 + f_mddi_10 + f_mddi_11 + f_mddi_12 + f_mddi_13) 
+```
+
+```{r handling missing data without imputation}
+#Check program feedback completion
+included_participants %>% 
+  select(pi_pfs_1, pi_pfs_2, pi_pfs_3, pi_pfs_4, pi_pfs_5, pi_pfs_6, pi_pfs_7) %>% 
+  vis_miss()
+#Looks like there is one participant who completed items 2-8 but not item 1, need to find them:
+check_pfs_partial <- included_participants %>%
+  filter(!is.na(pi_pfs_1) | !is.na(pi_pfs_2) | !is.na(pi_pfs_3) | !is.na(pi_pfs_4) | !is.na(pi_pfs_5) | !is.na(pi_pfs_6) | !is.na(pi_pfs_7))
+#Compare to a dataframe of folks who completed all of the PFS items
+check_pfs_all <- included_participants %>%
   mutate(pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7) %>%
   filter(!is.na(pi_pfs_sum))
+#Identify the one different participant ID:
+missing_participant_ids <- setdiff(check_pfs_partial$Participant_ID, check_pfs_all$Participant_ID)
+print(missing_participant_ids)
+#The participant with missing data is 64531 
+###FIGURE OUT WHAT TO DO WITH THEM###
+
+#Create score and filter for program feedback completers (just renaming for later code here since the data frame was made above)
+included_participants_pfs <- check_pfs_all
 
 #Identify participants with greater than 5% missing baseline primary outcomes data
-#For each participant, add a new column that calculates the total number of baseline primary outcome items answered by each participant 
+#For each participant, add a new column that calculates the percent missing of baseline primary outcome items
 included_participants <- included_participants %>%
-  mutate(total_responses_bprimary = rowSums(
-    !is.na(select(included_participants, b_mfq_1, b_mfq_2, b_mfq_3, b_mfq_4, b_mfq_5, b_mfq_6, b_mfq_7, b_mfq_8, b_mfq_9, b_mfq_10, b_mfq_11, b_mfq_12, b_mfq_13, b_edeq_1, b_edeq_2, b_edeq_3, b_edeq_4, b_edeq_5, b_edeq_6, b_edeq_7, b_edeq_8, b_edeq_9, b_edeq_10)), 
-    na.rm = TRUE))
-#For each participant, calculate the percent of missing responses (there are 23 items total)
-included_participants <- included_participants %>%
-   mutate(percent_missing = (1 - (total_responses_bprimary / 23)) * 100) 
+  mutate(percent_missing = rowMeans(
+    is.na(select(included_participants, b_mfq_1, b_mfq_2, b_mfq_3, b_mfq_4, b_mfq_5, b_mfq_6, b_mfq_7, b_mfq_8, b_mfq_9, b_mfq_10, b_mfq_11, b_mfq_12, b_mfq_13, b_edeq_1, b_edeq_2, b_edeq_3, b_edeq_4, b_edeq_5, b_edeq_6, b_edeq_7, b_edeq_8, b_edeq_9, b_edeq_10)), 
+    na.rm = TRUE)) %>%
+  mutate(percent_missing = percent_missing * 100)
+
 #Make a new variable that identifies participants with more than 5% missing data (those with more than 5% missing are TRUE)
 included_participants <- included_participants %>%
   mutate(more_than_5_percent_missing = percent_missing > 5)
@@ -86,98 +154,83 @@ included_participants <- included_participants %>%
 included_participants <- included_participants %>%
   filter(!more_than_5_percent_missing)
 #In sum, there were originally 220 included_participants and now there are 218 (only had to drop two participants prior to imputation)
+###NEED TO CHECK### - I think included_participants can now be considered analysis-ready for imputation (since it dropped participants with more than 5% missing baseline data and includes all the variables that I think will be useful in imputation). There are a few extra variables that I've used along the way such as Participant_ID, treatment_group, percent_missing, and more_than_5_percent missing. Keep or drop these for imputation?
 ```
 
 ```{r imputation}
 set.seed(12345) #use the same seed number each time to make the code reproducible (the seed number is just the starting point used in the generation of a sequence of random numbers in the random forest)
 
-#Select the data needed for imputation (the outcome variables themselves and the variables that will go into the algorith WHICH I NEED TO ADD)
-variables_for_imputation <- included_participants %>%
-  select( b_mfq_1, b_mfq_2, b_mfq_3, b_mfq_4, b_mfq_5, b_mfq_6, b_mfq_7, b_mfq_8, b_mfq_9, b_mfq_10, b_mfq_11, b_mfq_12, b_mfq_13, b_edeq_1, b_edeq_2, b_edeq_3, b_edeq_4, b_edeq_5, b_edeq_6, b_edeq_7, b_edeq_8, b_edeq_9, b_edeq_10)
-
-imputed_data <- missForest(variables_for_imputation)
-imputed_data <- as.data.frame(imputed_data$ximp)
-imputed_data <- round(imputed_data) #Since the algorithm introduces decimals which is not appropriate for this data, round to the nearest whole number
+#x below will be the analysis-ready dataset with
+#imputed_data <- missForest(included_participants)
+#imputed_data <- as.data.frame(imputed_data$ximp)
+#imputed_data <- round(imputed_data) #Since the algorithm introduces decimals which is not appropriate for this data, round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this.
 ```
 
-```{r scoring and create specific data frames}
-#Create scores and filter for proximal outcomes completers 
-#NOTE TO SELF: Since we will be imputing data for anyone with less than 5% missing on the baseline PRIMARY outcomes, filtering for complete cases here might eventually not be necessary. Rather, will just use this to get sum scores. Will likely need to change object name and/or use a different dataframe throughout (with more complete data) once imputation is done. Complete, non-imputed cases will likely only be used for a robustness check. 
-included_participants_complete <- included_participants %>%
-  mutate(b_bhs_sum = b_bhs_1 + b_bhs_2 + b_bhs_3 + b_bhs_4,
-         pi_bhs_sum = pi_bhs_1 + pi_bhs_2 + pi_bhs_3 + pi_bhs_4,
-         b_shs_agency_sum = b_shs_agency_1 + b_shs_agency_2 + b_shs_agency_3,
-         pi_shs_agency_sum = pi_shs_agency_1 + pi_shs_agency_2 + pi_shs_agency_3,
-         b_biss_sum = b_biss_1 + b_biss_2 + b_biss_3 + b_biss_4 +  b_biss_5 + b_biss_6, #items 2, 4, and 6 are already reverse-scored in Qualtrics
-         pi_biss_sum = pi_biss_1 + pi_biss_2 + pi_biss_3 + pi_biss_4 +  pi_biss_5 + pi_biss_6, #items 2, 4, and 6 are already reverse-scored in Qualtrics
-         b_fas_sum = b_fas_1 + b_fas_2 + b_fas_3 + b_fas_4 + b_fas_5 + b_fas_6 + b_fas_7,
-         pi_fas_sum = pi_fas_1 + pi_fas_2 + pi_fas_3 + pi_fas_4 + pi_fas_5 + pi_fas_6 + pi_fas_7,
-         b_biaaq_sum = b_biaaq_1 + b_biaaq_2 + b_biaaq_3 + b_biaaq_4 + b_biaaq_5 + b_biaaq_6 + b_biaaq_7 + b_biaaq_8 + b_biaaq_9 + b_biaaq_10 + b_biaaq_11 + b_biaaq_12, #all items are already reverse-scored in Qualtrics
-         pi_biaaq_sum = pi_biaaq_1 + pi_biaaq_2 + pi_biaaq_3 + pi_biaaq_4 + pi_biaaq_5 + pi_biaaq_6 + pi_biaaq_7 + pi_biaaq_8 + pi_biaaq_9 + pi_biaaq_10 + pi_biaaq_11 + pi_biaaq_12, #all items are already reverse-scored in Qualtrics
-         b_chime_sum = b_chime_1 + b_chime_2 + b_chime_3, #item 3 is already reverse-scored in Qualtrics
-         pi_chime_sum = pi_chime_1 + pi_chime_2 + pi_chime_3,
-         pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7) %>% #item 3 is already reverse-scored in Qualtrics
+```{r create complete data frames}
+#Filter for proximal outcomes completers 
+###NOTE TO SELF### - Since we will be imputing data, filtering for cases with complete proximal outcomes might eventually not be necessary. Just keeping for now since the code chunks below cannot work with missing values and therefore need these dataframes.
+included_participants_complete_proximal <- included_participants %>%
+  select(Participant_ID, b_bhs_sum, pi_bhs_sum, b_shs_agency_sum, pi_shs_agency_sum, b_biss_sum, pi_biss_sum, b_fas_sum, pi_fas_sum, b_biaaq_sum, pi_biaaq_sum, b_chime_sum, pi_chime_sum, pi_pfs_sum)%>% 
 filter(complete.cases(.))
-#N=187
+
+included_participants_complete_proximal <- included_participants %>%
+  semi_join(included_participants_complete_proximal, by = "Participant_ID")
 
 #Create a dataframe with complete PBN participants only
-pbn_complete <- included_participants_complete %>%
+pbn_complete <- included_participants_complete_proximal %>%
   filter(treatment_group == TRUE)
-#N=96
 
 #Create a dataframe with complete Control participants only
-control_complete <- included_participants_complete %>%
+control_complete <- included_participants_complete_proximal %>%
   filter(treatment_group == FALSE)
-#N=91
 ```
 
-```{r descriptives}
-descriptives <- included_participants_complete %>%
+```{r descriptives for proximal outcomes}
+descriptives <- included_participants_complete_proximal %>%
   group_by(treatment_group) %>%
   summarize(across(c(b_bhs_sum, pi_bhs_sum, b_shs_agency_sum, pi_shs_agency_sum, b_biss_sum, pi_biss_sum, b_fas_sum, pi_fas_sum, b_biaaq_sum, pi_biaaq_sum, b_chime_sum, pi_chime_sum, pi_pfs_sum), 
                    list(mean = mean, sd = sd)))
 print(descriptives)
 ```
 
-
 ```{r regressions for pre-post proximal outcomes}
 #Hopelessness
-lm_bhs <- lm(pi_bhs_sum ~ b_bhs_sum + treatment_group, data = included_participants_complete)
+lm_bhs <- lm(pi_bhs_sum ~ b_bhs_sum + treatment_group, data = included_participants_complete_proximal)
 summary(lm_bhs)
 coeftest(lm_bhs, vcov = sandwich)
 coefci(lm_bhs, vcov = sandwich)
 #Significant effect of treatment_group (p<0.001) in the expected direction (negative)
 
 #Agency
-lm_shs_agency <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + treatment_group, data = included_participants_complete)
+lm_shs_agency <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + treatment_group, data = included_participants_complete_proximal)
 summary(lm_shs_agency)
 coeftest(lm_shs_agency, vcov = sandwich)
 coefci(lm_shs_agency, vcov = sandwich)
 #Significant effect of treatment_group (p<0.05) in the expected direction (positive)
 
 #Body image state
-lm_biss <- lm(pi_biss_sum ~ b_biss_sum + treatment_group, data = included_participants_complete)
+lm_biss <- lm(pi_biss_sum ~ b_biss_sum + treatment_group, data = included_participants_complete_proximal)
 summary(lm_biss)
 coeftest(lm_biss, vcov = sandwich)
 coefci(lm_biss, vcov = sandwich)
 #Significant effect of treatment_group (p<0.001) in the expected direction (positive)
 
 #Functionality appreciation 
-lm_fas <- lm(pi_fas_sum ~ b_fas_sum + treatment_group, data = included_participants_complete)
+lm_fas <- lm(pi_fas_sum ~ b_fas_sum + treatment_group, data = included_participants_complete_proximal)
 summary(lm_fas)
 coeftest(lm_fas, vcov = sandwich)
 coefci(lm_fas, vcov = sandwich)
 #Significant effect of treatment_group (p<0.001) in the expected direction (positive)
 
 #Body image flexibility - EXPLORATORY
-lm_biaaq <- lm(pi_biaaq_sum ~ b_biaaq_sum + treatment_group, data = included_participants_complete)
+lm_biaaq <- lm(pi_biaaq_sum ~ b_biaaq_sum + treatment_group, data = included_participants_complete_proximal)
 summary(lm_biaaq)
 coeftest(lm_biaaq, vcov = sandwich)
 coefci(lm_biaaq, vcov = sandwich)
 #Significant effect of treatment_group (p<0.05) in the expected direction (positive)
 
 #Body-related mindfulness - EXPLORATORY
-lm_chime <- lm(pi_chime_sum ~ b_chime_sum + treatment_group, data = included_participants_complete)
+lm_chime <- lm(pi_chime_sum ~ b_chime_sum + treatment_group, data = included_participants_complete_proximal)
 summary(lm_chime)
 coeftest(lm_chime, vcov = sandwich)
 coefci(lm_chime, vcov = sandwich)
@@ -523,18 +576,17 @@ pbn_complete %>%
   summarize(mean = mean(value),
             sd = sd(value))
 
-#N and percent of intervention participants with sum score >3, reflect overall perceived SSI acceptability
+#N and percent of intervention participants with sum score >3 (selects Agree and Strongly Agree only), reflect overall perceived SSI acceptability
 included_participants_pfs %>%
   filter(treatment_group == TRUE) %>%
-  mutate(pi_pfs_sum_scores = pi_pfs_sum / 7) %>%
-  mutate(pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
-  summarise(
-    pi_pfs_sum_scores_acceptable_number = sum(pi_pfs_sum_scores_acceptable),
-    pi_pfs_sum_scores_acceptable_percent = (pi_pfs_sum_scores_acceptable_number * 100) / n()
-  )
+  mutate(pi_pfs_sum_scores = pi_pfs_sum / 7, 
+         pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
+  summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
 ```
 
-```{open-ended responses}
+```{r qual data}
+###COME BACK TO THIS### - Does not run right now because I removed text variables from  included_participants for imputation
+
 #Help seeking and unmet treatment for the full included sample, regardless of completion or randomization
 qual_help_seeking <- included_participants %>% 
   select(Participant_ID, b_unmet_mood_free_1, b_unmet_mood_free_2, b_unmet_ed_free_1, b_unmet_ed_free_2)
@@ -550,30 +602,32 @@ flextable::flextable(pfs_qual_intervention, cwidth = c(0.5,7,0.5))
 ```
 
 ```{r demographics}
+###COME BACK TO THIS### - Does not run right now because I removed text variables from  included_participants for imputation
+
 #Age
-included_participants_complete %>%
+included_participants_complete_proximal %>%
   count(b_dem_age) %>%
   mutate(percent = (n / sum(n))*100)
 
 #SAAB
-included_participants_complete %>%
+included_participants_complete_proximal %>%
   count(b_dem_sex) %>%
   mutate(percent = (n / sum(n))*100)
 
 #Gender
-included_participants_complete %>%
+included_participants_complete_proximal %>%
   mutate(b_dem_gender = factor(b_dem_gender, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "14", "15", "16"))) %>%
   count(b_dem_gender) %>%
   mutate(percent_of_sample = n / sum(n) * 100) %>%
   arrange(b_dem_gender)
 
 #Sexual orientation
-included_participants_complete %>%
+included_participants_complete_proximal %>%
 count(b_dem_sexuality) %>%
   mutate(percent = (n / sum(n))*100)
 
 #Race
-included_participants_complete %>%
+included_participants_complete_proximal %>%
   select(starts_with("b_dem_race_ethnicity")) %>%
   select(-b_dem_race_ethnicity_7_TEXT) %>%
   replace(is.na(.), 0) %>% #NAs are 0
