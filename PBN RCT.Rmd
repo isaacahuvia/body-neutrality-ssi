@@ -63,26 +63,33 @@ included_participants <- merged_data %>%
 followup_data <- followup_data %>%
   filter(Participant_ID %in% c(40077, 15186, 11697, 95674,40889, 84608, 61437, 16432, 21140, 58776, 62516, 20457, 39455, 35756, 65322, 72424, 38713, 96986, 28301, 14617, 14806, 93863, 13842, 31849, 57712, 45841, 40397, 75164, 71675, 58650, 41917, 50884, 48434, 18856, 17231, 56049, 68213, 93764, 15333, 98726, 80569, 63962, 40376, 83329, 90314, 59978, 66920, 35067, 89229, 82287, 96711, 11308, 53611, 57517, 74462, 24314, 69898, 74951, 38601, 60126, 58830, 17149, 31067, 98233, 84267, 45565, 48031, 19978, 25987, 38488, 86804, 86300, 18348, 17032, 60501, 88241, 39606, 67236, 11868,68267, 35553, 95389))
 #As of 5/9/24 compensation, this should only be N=82, but there are 105 rows because of duplicates. Get rid of duplicates (keeping the one with the most Progress, and if Progress is 100 for multiple, keeping most recent by RecordedDate). 
-###NEED TO CHECK THIS WORK###
-followup_data <- followup_data %>%
-  arrange(Participant_ID, desc(Progress), RecordedDate)
-followup_data <- followup_data %>%
-  distinct(Participant_ID, .keep_all = TRUE)
+followup_data_deduplicated <- followup_data %>%
+  group_by(Participant_ID) %>%
+  arrange(desc(Progress), RecordedDate) %>%
+  slice(1)
 
 #Add the follow-up data to the baseline data. 
 ###NEED TO CHECK THIS WORK###
-included_participants <- included_participants %>%
-  left_join(followup_data, by = "Participant_ID")
+participants_with_followp <- included_participants %>%
+  left_join(followup_data_deduplicated, by = "Participant_ID")
 
 #Create a binary variable to identify the treatment group
-included_participants <- included_participants %>%
+participants_with_followp <- participants_with_followp %>%
   mutate(treatment_group = Condition == "Intervention")
+
+#Create a binary variable to identify if participants completed the intervention condition
+participants_with_followp <- participants_with_followp %>%
+  mutate(intervention_completed = Intervention.Completed == "Intervention Completed")
+
+#Create a binary variable to identify if participants completed the control condition
+participants_with_followp <- participants_with_followp %>%
+  mutate(control_completed = Control.Completed == "Contol")
 
 #Select variables that will be used for analysis / in imputation
 ###SINCE REMOVING TIMING AND TEXT-BASED VARIABLES, WILL NEED TO LOOK AT SEPERATELY ELSEWHERE###
 ###WHAT ELSE SHOULD WE INCLUDE####
-included_participants <- included_participants %>%
-   select(Participant_ID, treatment_group, starts_with(c("b_dem", "b_current", "b_past", "b_unmet", "b_hunger", "b_bhs", "b_shs_agency", "b_biss", "b_fas", "b_biaaq", "b_chime", "b_mfq", "b_edeq", "b_mddi", "pi_pfs", "pi_bhs", "pi_shs_agency", "pi_biss", "pi_fas", "pi_biaaq", "pi_chime", "f_new", "f_bhs", "f_shs_agency", "f_biss", "f_fas", "f_biaaq", "f_chime", "f_mfq", "f_edeq", "f_mddi"))) %>%
+participants_with_followp <- participants_with_followp %>%
+   select(Participant_ID, treatment_group, intervention_completed, starts_with(c("b_dem", "b_current", "b_past", "b_unmet", "b_hunger", "b_bhs", "b_shs_agency", "b_biss", "b_fas", "b_biaaq", "b_chime", "b_mfq", "b_edeq", "b_mddi", "pi_pfs", "pi_bhs", "pi_shs_agency", "pi_biss", "pi_fas", "pi_biaaq", "pi_chime", "f_new", "f_bhs", "f_shs_agency", "f_biss", "f_fas", "f_biaaq", "f_chime", "f_mfq", "f_edeq", "f_mddi"))) %>%
   select(-contains("free"), -contains("TEXT"), -contains("_tim_"), -contains("pfs_like"), -contains("pfs_change"), -contains("pfs_other")) %>%
   mutate_all(as.numeric)
 ###NEED TO CHECK### - mutate_all(as.numeric) produces two warning messages that introduce NAs in b_dem_race_ethnicity and b_dem_gender but I'm not sure why. I am pretty sure missForest() can only work with numeric and categorical variables (meaning I think we have to override variables like treatment_group that were originally logical). Will this cause problems later?
@@ -90,7 +97,7 @@ included_participants <- included_participants %>%
 
 ```{r create sum scores}
 #All relevant items are already reverse-scored in Qualtrics
-included_participants <- included_participants %>%
+participants_with_followp <- participants_with_followp %>%
   mutate(b_bhs_sum = b_bhs_1 + b_bhs_2 + b_bhs_3 + b_bhs_4,
          pi_bhs_sum = pi_bhs_1 + pi_bhs_2 + pi_bhs_3 + pi_bhs_4,
          f_bhs_sum = f_bhs_1 + f_bhs_2 + f_bhs_3 + f_bhs_4,
@@ -120,73 +127,73 @@ included_participants <- included_participants %>%
 
 ```{r handling missing data without imputation}
 #Check program feedback completion
-included_participants %>% 
+participants_with_followp %>% 
   select(pi_pfs_1, pi_pfs_2, pi_pfs_3, pi_pfs_4, pi_pfs_5, pi_pfs_6, pi_pfs_7) %>% 
   vis_miss()
 #Looks like there is one participant who completed items 2-8 but not item 1, need to find them:
-check_pfs_partial <- included_participants %>%
+participants_with_followp_pfs_missing <- participants_with_followp %>%
   filter(!is.na(pi_pfs_1) | !is.na(pi_pfs_2) | !is.na(pi_pfs_3) | !is.na(pi_pfs_4) | !is.na(pi_pfs_5) | !is.na(pi_pfs_6) | !is.na(pi_pfs_7))
 #Compare to a dataframe of folks who completed all of the PFS items
-check_pfs_all <- included_participants %>%
+participants_with_followp_pfs <- participants_with_followp %>%
   mutate(pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7) %>%
   filter(!is.na(pi_pfs_sum))
 #Identify the one different participant ID:
-missing_participant_ids <- setdiff(check_pfs_partial$Participant_ID, check_pfs_all$Participant_ID)
+missing_participant_ids <- setdiff(participants_with_followp_pfs_missing$Participant_ID, participants_with_followp_pfs$Participant_ID)
 print(missing_participant_ids)
-#The participant with missing data is 64531 
-###FIGURE OUT WHAT TO DO WITH THEM###
-
-#Create score and filter for program feedback completers (just renaming for later code here since the data frame was made above)
-included_participants_pfs <- check_pfs_all
+#The participant with missing PFS data is 64531. Since it is only one participant (everyone else either did the whole scale or skipped it completely), we will just drop them from PFS analyses. 
 
 #Identify participants with greater than 5% missing baseline primary outcomes data
 #For each participant, add a new column that calculates the percent missing of baseline primary outcome items
-included_participants <- included_participants %>%
+participants_with_followp <- participants_with_followp %>%
   mutate(percent_missing = rowMeans(
-    is.na(select(included_participants, b_mfq_1, b_mfq_2, b_mfq_3, b_mfq_4, b_mfq_5, b_mfq_6, b_mfq_7, b_mfq_8, b_mfq_9, b_mfq_10, b_mfq_11, b_mfq_12, b_mfq_13, b_edeq_1, b_edeq_2, b_edeq_3, b_edeq_4, b_edeq_5, b_edeq_6, b_edeq_7, b_edeq_8, b_edeq_9, b_edeq_10)), 
+    is.na(select(participants_with_followp, b_mfq_1, b_mfq_2, b_mfq_3, b_mfq_4, b_mfq_5, b_mfq_6, b_mfq_7, b_mfq_8, b_mfq_9, b_mfq_10, b_mfq_11, b_mfq_12, b_mfq_13, b_edeq_1, b_edeq_2, b_edeq_3, b_edeq_4, b_edeq_5, b_edeq_6, b_edeq_7, b_edeq_8, b_edeq_9, b_edeq_10)), 
     na.rm = TRUE)) %>%
   mutate(percent_missing = percent_missing * 100)
 
 #Make a new variable that identifies participants with more than 5% missing data (those with more than 5% missing are TRUE)
-included_participants <- included_participants %>%
+participants_with_followp <- participants_with_followp %>%
   mutate(more_than_5_percent_missing = percent_missing > 5)
 #Remove participants where more_than_5_percent_missing is TRUE
-included_participants <- included_participants %>%
+participants_with_followp <- participants_with_followp %>%
   filter(!more_than_5_percent_missing)
-#In sum, there were originally 220 included_participants and now there are 218 (only had to drop two participants prior to imputation)
-###NEED TO CHECK### - I think included_participants can now be considered analysis-ready for imputation (since it dropped participants with more than 5% missing baseline data and includes all the variables that I think will be useful in imputation). There are a few extra variables that I've used along the way such as Participant_ID, treatment_group, percent_missing, and more_than_5_percent missing. Keep or drop these for imputation?
+#In sum, there were originally 220 participants_with_followp and now there are 218 (only had to drop two participants prior to imputation)
+
+#Drop remaining columns that are not useful for imputation
+participants_with_followp_for_imputation <- participants_with_followp %>%
+  select(-Participant_ID, -contains("percent_missing"))
 ```
 
 ```{r imputation}
 set.seed(12345) #use the same seed number each time to make the code reproducible (the seed number is just the starting point used in the generation of a sequence of random numbers in the random forest)
 
 #x below will be the analysis-ready dataset with
-#imputed_data <- missForest(included_participants)
+#imputed_data <- missForest(participants_with_followp_for_imputation)
 #imputed_data <- as.data.frame(imputed_data$ximp)
-#imputed_data <- round(imputed_data) #Since the algorithm introduces decimals which is not appropriate for this data, round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this.
+#imputed_data <- round(imputed_data) #Since the algorithm introduces decimals which is not appropriate for this data, round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this. 
+#TO DO: Also, make sure to print error estimates for manuscript
 ```
 
 ```{r create complete data frames}
 #Filter for proximal outcomes completers 
 ###NOTE TO SELF### - Since we will be imputing data, filtering for cases with complete proximal outcomes might eventually not be necessary. Just keeping for now since the code chunks below cannot work with missing values and therefore need these dataframes.
-included_participants_complete_proximal <- included_participants %>%
+participants_with_followp_complete_proximal <- participants_with_followp %>%
   select(Participant_ID, b_bhs_sum, pi_bhs_sum, b_shs_agency_sum, pi_shs_agency_sum, b_biss_sum, pi_biss_sum, b_fas_sum, pi_fas_sum, b_biaaq_sum, pi_biaaq_sum, b_chime_sum, pi_chime_sum, pi_pfs_sum)%>% 
 filter(complete.cases(.))
 
-included_participants_complete_proximal <- included_participants %>%
-  semi_join(included_participants_complete_proximal, by = "Participant_ID")
+participants_with_followp_complete_proximal <- participants_with_followp %>%
+  semi_join(participants_with_followp_complete_proximal, by = "Participant_ID")
 
 #Create a dataframe with complete PBN participants only
-pbn_complete <- included_participants_complete_proximal %>%
+pbn_complete <- participants_with_followp_complete_proximal %>%
   filter(treatment_group == TRUE)
 
 #Create a dataframe with complete Control participants only
-control_complete <- included_participants_complete_proximal %>%
+control_complete <- participants_with_followp_complete_proximal %>%
   filter(treatment_group == FALSE)
 ```
 
 ```{r descriptives for proximal outcomes}
-descriptives <- included_participants_complete_proximal %>%
+descriptives <- participants_with_followp_complete_proximal %>%
   group_by(treatment_group) %>%
   summarize(across(c(b_bhs_sum, pi_bhs_sum, b_shs_agency_sum, pi_shs_agency_sum, b_biss_sum, pi_biss_sum, b_fas_sum, pi_fas_sum, b_biaaq_sum, pi_biaaq_sum, b_chime_sum, pi_chime_sum, pi_pfs_sum), 
                    list(mean = mean, sd = sd)))
@@ -195,42 +202,42 @@ print(descriptives)
 
 ```{r regressions for pre-post proximal outcomes}
 #Hopelessness
-lm_bhs <- lm(pi_bhs_sum ~ b_bhs_sum + treatment_group, data = included_participants_complete_proximal)
+lm_bhs <- lm(pi_bhs_sum ~ b_bhs_sum + treatment_group, data = participants_with_followp_complete_proximal)
 summary(lm_bhs)
 coeftest(lm_bhs, vcov = sandwich)
 coefci(lm_bhs, vcov = sandwich)
 #Significant effect of treatment_group (p<0.001) in the expected direction (negative)
 
 #Agency
-lm_shs_agency <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + treatment_group, data = included_participants_complete_proximal)
+lm_shs_agency <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + treatment_group, data = participants_with_followp_complete_proximal)
 summary(lm_shs_agency)
 coeftest(lm_shs_agency, vcov = sandwich)
 coefci(lm_shs_agency, vcov = sandwich)
 #Significant effect of treatment_group (p<0.05) in the expected direction (positive)
 
 #Body image state
-lm_biss <- lm(pi_biss_sum ~ b_biss_sum + treatment_group, data = included_participants_complete_proximal)
+lm_biss <- lm(pi_biss_sum ~ b_biss_sum + treatment_group, data = participants_with_followp_complete_proximal)
 summary(lm_biss)
 coeftest(lm_biss, vcov = sandwich)
 coefci(lm_biss, vcov = sandwich)
 #Significant effect of treatment_group (p<0.001) in the expected direction (positive)
 
 #Functionality appreciation 
-lm_fas <- lm(pi_fas_sum ~ b_fas_sum + treatment_group, data = included_participants_complete_proximal)
+lm_fas <- lm(pi_fas_sum ~ b_fas_sum + treatment_group, data = participants_with_followp_complete_proximal)
 summary(lm_fas)
 coeftest(lm_fas, vcov = sandwich)
 coefci(lm_fas, vcov = sandwich)
 #Significant effect of treatment_group (p<0.001) in the expected direction (positive)
 
 #Body image flexibility - EXPLORATORY
-lm_biaaq <- lm(pi_biaaq_sum ~ b_biaaq_sum + treatment_group, data = included_participants_complete_proximal)
+lm_biaaq <- lm(pi_biaaq_sum ~ b_biaaq_sum + treatment_group, data = participants_with_followp_complete_proximal)
 summary(lm_biaaq)
 coeftest(lm_biaaq, vcov = sandwich)
 coefci(lm_biaaq, vcov = sandwich)
 #Significant effect of treatment_group (p<0.05) in the expected direction (positive)
 
 #Body-related mindfulness - EXPLORATORY
-lm_chime <- lm(pi_chime_sum ~ b_chime_sum + treatment_group, data = included_participants_complete_proximal)
+lm_chime <- lm(pi_chime_sum ~ b_chime_sum + treatment_group, data = participants_with_followp_complete_proximal)
 summary(lm_chime)
 coeftest(lm_chime, vcov = sandwich)
 coefci(lm_chime, vcov = sandwich)
@@ -577,7 +584,7 @@ pbn_complete %>%
             sd = sd(value))
 
 #N and percent of intervention participants with sum score >3 (selects Agree and Strongly Agree only), reflect overall perceived SSI acceptability
-included_participants_pfs %>%
+participants_with_followp_pfs %>%
   filter(treatment_group == TRUE) %>%
   mutate(pi_pfs_sum_scores = pi_pfs_sum / 7, 
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
@@ -585,16 +592,16 @@ included_participants_pfs %>%
 ```
 
 ```{r qual data}
-###COME BACK TO THIS### - Does not run right now because I removed text variables from  included_participants for imputation
+###COME BACK TO THIS### - Does not run right now because I removed text variables from  participants_with_followp for imputation
 
 #Help seeking and unmet treatment for the full included sample, regardless of completion or randomization
-qual_help_seeking <- included_participants %>% 
+qual_help_seeking <- participants_with_followp %>% 
   select(Participant_ID, b_unmet_mood_free_1, b_unmet_mood_free_2, b_unmet_ed_free_1, b_unmet_ed_free_2)
 flextable::flextable(qual_help_seeking, cwidth = c(0.5,7,0.5))
 #write.xlsx(qual_help_seeking, "qual_help_seeking.xlsx")
 
 #Program feedback for the intervention group
-pfs_qual_intervention <- included_participants_pfs %>%
+pfs_qual_intervention <- participants_with_followp_pfs %>%
   filter(treatment_group == TRUE) %>%
    select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)
 flextable::flextable(pfs_qual_intervention, cwidth = c(0.5,7,0.5))
@@ -602,32 +609,32 @@ flextable::flextable(pfs_qual_intervention, cwidth = c(0.5,7,0.5))
 ```
 
 ```{r demographics}
-###COME BACK TO THIS### - Does not run right now because I removed text variables from  included_participants for imputation
+###COME BACK TO THIS### - Does not run right now because I removed text variables from  participants_with_followp for imputation
 
 #Age
-included_participants_complete_proximal %>%
+participants_with_followp_complete_proximal %>%
   count(b_dem_age) %>%
   mutate(percent = (n / sum(n))*100)
 
 #SAAB
-included_participants_complete_proximal %>%
+participants_with_followp_complete_proximal %>%
   count(b_dem_sex) %>%
   mutate(percent = (n / sum(n))*100)
 
 #Gender
-included_participants_complete_proximal %>%
+participants_with_followp_complete_proximal %>%
   mutate(b_dem_gender = factor(b_dem_gender, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "14", "15", "16"))) %>%
   count(b_dem_gender) %>%
   mutate(percent_of_sample = n / sum(n) * 100) %>%
   arrange(b_dem_gender)
 
 #Sexual orientation
-included_participants_complete_proximal %>%
+participants_with_followp_complete_proximal %>%
 count(b_dem_sexuality) %>%
   mutate(percent = (n / sum(n))*100)
 
 #Race
-included_participants_complete_proximal %>%
+participants_with_followp_complete_proximal %>%
   select(starts_with("b_dem_race_ethnicity")) %>%
   select(-b_dem_race_ethnicity_7_TEXT) %>%
   replace(is.na(.), 0) %>% #NAs are 0
