@@ -174,7 +174,7 @@ participants_with_followup <- participants_with_followup %>%
 participants_with_followup <- participants_with_followup %>%
   mutate(control_completed = "Control Completed" == "Contol")
 
-#Make necessary variables numeric (though they may all be already thanks to the read_survey import)
+#Make necessary variables numeric
 participants_with_followup <- participants_with_followup %>%
   mutate(across(c(pi_pfs_1:pi_pfs_7, starts_with("b_dem_age"), starts_with("b_bhs"), starts_with("b_shs_agency"),starts_with("b_biss"), starts_with("b_fas"), starts_with("b_biaaq"),  starts_with("b_chime"), starts_with("b_mfq"), starts_with("b_edeq"), starts_with("b_mddi"), starts_with("pi_bhs"), starts_with("pi_shs_agency"), starts_with("pi_biss"), starts_with("pi_fas"), starts_with("pi_biaaq"), starts_with("pi_chime"), starts_with("f_bhs"), starts_with("f_shs_agency"), starts_with("f_biss"), starts_with("f_fas"), starts_with("f_biaaq"),starts_with("f_chime"), starts_with("f_mfq"), starts_with("f_edeq"), starts_with("f_mddi")), 
                 as.numeric))
