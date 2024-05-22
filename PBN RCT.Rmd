@@ -34,7 +34,8 @@ library(qualtRics)
 setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline)")
 
 #Load data - #Using the .cols argument because otherwise some variables that should not be numeric are imported as such (e.g., demographics)
-original_survey_data <- read_survey("original_survey_data.csv", col_types = cols(.default ="c"))
+#original_survey_data <- read_survey("original_survey_data.csv", col_types = cols(.default ="c"))
+original_survey_data <- read_survey("original_survey_data_choice_text.csv", col_types = cols(.default ="c"))
 new_survey_data <- read_survey("new_survey_data.csv", col_types = cols(.default ="c"))
 followup_data <- read_survey("followups_5.9.24.csv", col_types = cols(.default ="c")) 
 ###WILL NEED TO UPDATE WITH FULL SAMPLE###
