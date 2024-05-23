@@ -8,8 +8,6 @@ output:
 ---
 
 ```{r setup}
-knitr::opts_chunk$set(echo = TRUE)
-
 #Load required packages
 if(!require(tidyverse)){install.packages('tidyverse')}
 library(tidyverse)
@@ -29,14 +27,17 @@ if(!require(missForest)){install.packages('missForest')}
 library(missForest)
 if(!require(visdat)){install.packages('visdat')}
 library(visdat)
+if(!require(qualtRics)){install.packages('qualtRics')}
+library(qualtRics)
 
 #Set working directory
 setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline)")
 
-#Load data
-original_survey_data <- read.csv("original_survey_data.csv")
-new_survey_data <- read.csv("new_survey_data.csv")
-followup_data <- read.csv("followups_5.9.24.csv") 
+#Load data - #Using the .cols argument because otherwise some variables that should not be numeric are imported as such (e.g., demographics)
+#original_survey_data <- read_survey("original_survey_data.csv", col_types = cols(.default ="c"))
+original_survey_data <- read_survey("original_survey_data_choice_text.csv", col_types = cols(.default ="c"))
+new_survey_data <- read_survey("new_survey_data.csv", col_types = cols(.default ="c"))
+followup_data <- read_survey("followups_5.9.24.csv", col_types = cols(.default ="c")) 
 ###WILL NEED TO UPDATE WITH FULL SAMPLE###
 ```
 
@@ -74,6 +75,16 @@ participants_with_followup <- included_participants %>%
 ```
 
 ```{r clean data}
+
+#participants_with_followup %>% 
+#  mutate(
+ #   across(
+  #    .cols = c(b_dem_gender, b_dem_race_ethnicity),
+   #   .fns = as.factor
+    #)
+  #)
+###CAN CONSIDER USNG ABOVE FORMAT FOR ALL VARIABLES, BUT THEN DOESN'T RELABLE WITH TEXT NAMES
+
 #Make necessary variables factors
 ###STILL NEED TO DO GENDER AND RACE/ETHNICITY, SEE IF I CAN DOWNLOAD DATA BETTER###
 participants_with_followup$b_dem_saab <- factor(
@@ -155,17 +166,14 @@ participants_with_followup$f_new_support_ed <- factor(
 #Create a binary variable to identify the treatment group
 participants_with_followup <- participants_with_followup %>%
   mutate(treatment_group = Condition == "Intervention")
-###WILL THIS WORK IN MISSFOREST OR DO WE NEED TO DUMMY CODE###
 
 #Create a binary variable to identify if participants completed the intervention condition
 participants_with_followup <- participants_with_followup %>%
-  mutate(intervention_completed = Intervention.Completed == "Intervention Completed")
-###WILL THIS WORK IN MISSFOREST OR DO WE NEED TO DUMMY CODE###
+  mutate(intervention_completed = "Intervention Completed" == "Intervention Completed")
 
 #Create a binary variable to identify if participants completed the control condition
 participants_with_followup <- participants_with_followup %>%
-  mutate(control_completed = Control.Completed == "Contol")
-###WILL THIS WORK IN MISSFOREST OR DO WE NEED TO DUMMY CODE###
+  mutate(control_completed = "Control Completed" == "Contol")
 
 #Make necessary variables numeric
 participants_with_followup <- participants_with_followup %>%
@@ -201,8 +209,6 @@ pfs_qual_intervention <- participants_with_followup_pfs %>%
 flextable::flextable(pfs_qual_intervention, cwidth = c(0.5,7,0.5))
 #write.xlsx(pfs_qual_intervention, "pfs_qual_intervention.xlsx")
 ```
-
-
 
 ```{r create sum scores}
 #All relevant items are already reverse-scored in Qualtrics
