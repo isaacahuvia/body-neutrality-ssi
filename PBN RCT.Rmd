@@ -29,16 +29,22 @@ if(!require(visdat)){install.packages('visdat')}
 library(visdat)
 if(!require(qualtRics)){install.packages('qualtRics')}
 library(qualtRics)
+if(!require(readxl)){install.packages('readxl')}
+library(readxl)
 
 #Set working directory
 setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline)")
 
 #Load data - #Using the .cols argument because otherwise some variables that should not be numeric are imported as such (e.g., demographics)
-#original_survey_data <- read_survey("original_survey_data.csv", col_types = cols(.default ="c"))
-original_survey_data <- read_survey("original_survey_data_choice_text.csv", col_types = cols(.default ="c"))
+original_survey_data <- read_survey("original_survey_data.csv", col_types = cols(.default ="c"))
+#original_survey_data <- read_survey("original_survey_data_choice_text.csv", col_types = cols(.default ="c")) tried choice text to see if it fixes how race/ethnicity and gender data is downloaded, but it does not
 new_survey_data <- read_survey("new_survey_data.csv", col_types = cols(.default ="c"))
 followup_data <- read_survey("followups_5.9.24.csv", col_types = cols(.default ="c")) 
-###WILL NEED TO UPDATE WITH FULL SAMPLE###
+###WILL NEED TO UPDATE WITH FULL SAMPLE##
+
+#Load de-identified participant database
+participant_database <- file.choose() ###Importing the csv file from the lab server directly was being a pain, FIX LATER###
+participant_database <- read.csv(participant_database)
 ```
 
 ```{r merge data}
@@ -54,7 +60,48 @@ original_survey_data <- original_survey_data %>%
 
 #Now we can merge
 merged_data <- bind_rows(original_survey_data, new_survey_data)
+```
 
+```{r sample breakdowns}
+
+#The reason the numbers are weird below! We don't actually have a completer_baseline N of 250 because we decided after the fact to exclude 30 people that we already compensated. Probably need to put in a new word for the "brown No" within the excel itself (and make a new csv of it) so that I can also filter out the people we retroactively excluded (make sure this is done for completer_baseline and incomplete_baseline, but may not make a difference for incomplete_baseline)
+
+#Participants who submitted the baseline and passed data integrity checks
+completer_baseline <- participant_database %>% 
+  filter(Include.in.Analysis == "Yes" & Compensation.Date != "N/A")  
+n_completer_baseline <- nrow(completer_baseline)
+#N=192
+
+#Participants who submitted the baseline and were compensated, but were retroactively excluded due to new data integrity criteria
+completer_baseline_excluded <- participant_database %>% 
+  filter(Compensation.Date != "N/A" & Include.in.Analysis == "No 2")
+n_completer_baseline_excluded <- nrow(completer_baseline_excluded)
+#N=57
+
+#Participants who got randomized and passed data integrity checks but did not get compensated (due to baseline incomplete)
+incomplete_baseline <- participant_database %>% 
+  filter(Measures.Complete == "No" & Include.in.Analysis == "Yes")
+n_incomplete_baseline <- nrow(incomplete_baseline)
+#N=28
+
+#All participants who got randomized and passed the data integrity checks (regardless of intervention or baseline completion)
+randomized <- bind_rows(completer_baseline, incomplete_baseline)
+n_randomized <- nrow(randomized)
+#N=220
+
+#Intervention completers who pass data integrity checks
+merged_data <- merged_data %>%
+  mutate(Participant_ID = as.character(Participant_ID))
+randomized <- randomized %>%
+  mutate(Participant_ID = as.character(Participant_ID))
+completer_intervention <- merged_data %>% 
+  filter(`Intervention Completed` == "Intervention Completed" | `Control Completed` == "Control Completed")  %>%
+  semi_join(randomized, by = "Participant_ID")
+n_completer_intervention <- nrow(completer_intervention)
+#N=205
+```
+
+```{r}
 #In the baseline data, select the participants being included in analysis (per data integrity checks, should be N=220)
 included_participants <- merged_data %>%
   filter(Participant_ID %in% c(40077, 15186, 11697, 95674, 40889, 84608, 61437, 16432, 22485, 24378, 21140, 58776, 13649, 83679, 62516, 52326, 20457, 39455, 64886, 35756, 65322, 86883, 72424, 92104, 33504, 38713, 96986, 28301, 14617, 14806, 93863, 13842, 31849, 74139, 53775, 57712, 96120, 49399, 45841, 40397, 75164, 71675, 30277, 58650, 18169, 41917, 50884, 70371, 48434, 18974, 18856, 17231, 56049, 68213, 93764, 15333, 98726, 80569, 63962, 66481, 40376, 83329, 90314, 59978, 66920, 35067, 15025, 77121, 89229, 82287, 96711, 11308, 53611, 57517, 47321, 43097, 74462, 11290, 49908, 24314, 69311, 70500, 49864, 69898, 74951, 38601, 60126, 26551, 58830, 21592, 17149, 31067, 39743, 71511, 45789, 84417, 56534, 98233, 84267, 68200, 76371, 45565, 48031, 19978, 25987, 38488, 25643, 86804, 86300, 18348, 90947, 53863, 17032, 60501, 27455, 62781, 88241, 55765, 39606, 66912, 67236, 11868, 68267, 35553, 95389, 80941, 15777, 53969, 95004, 43258, 64019, 99949, 72626, 47331, 50401, 96007, 65187, 31188, 93980, 76870, 32309, 85411, 85344, 48970, 54988, 49034, 77719, 78040, 86763, 33280, 23158, 87771, 21842, 19199, 96320, 64719, 78881, 49236, 26869, 65509, 38538, 73614, 80888, 55845, 86114, 22584, 81514, 92289, 86314, 65863, 77450, 25638, 88046, 99374, 13638, 35047, 38572, 26776, 86023, 43295, 20973, 53220, 29614, 62193, 42215, 41799, 93664, 50466, 78161, 85350, 87127, 15065, 11827, 63743, 20364, 17670, 44268, 48593, 96225, 71632, 97410, 90795, 49102, 68198, 16855, 64531, 13302, 57955, 21313, 13023, 69913, 75263, 93022, 48022, 22684, 17052, 72038, 56590, 56815, 76432))
@@ -71,8 +118,9 @@ followup_data_deduplicated <- followup_data %>%
 
 #Add the follow-up data to the baseline data. 
 participants_with_followup <- included_participants %>%
-  left_join(followup_data_deduplicated, by = "Participant_ID")
+  left_join(followup_data_deduplicated, by = "Participant_ID") #this includes people who are totally missing follow-up data, it just attaches the follow-up data for people who do have it (contrary to the number of observations here, this does not mean we have 220 follow-up completers)
 ```
+
 
 ```{r clean data}
 
@@ -191,7 +239,7 @@ participants_with_followup_quant <- participants_with_followup %>%
 participants_with_followup_qual <- participants_with_followup %>%
   select(Participant_ID, treatment_group, intervention_completed, contains("free"), contains("TEXT"), contains("pfs_like"), contains("pfs_change"), -contains("pfs_other"))
 
-#Dataframe for program feedback analysis (completed all PFS items, regardless of randomzation)
+#Dataframe for program feedback analysis (completed all PFS items, regardless of randomization)
 participants_with_followup_pfs <- participants_with_followup %>%
   mutate(pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7) %>%
   filter(!is.na(pi_pfs_sum))
@@ -501,6 +549,8 @@ control_chime_stats <- control_complete %>%
 
 #Within-person effect sizes
 
+###PROBABLY SHOULD ALSO CALCULATE dz PER LAB STANDARDS###
+
 ##Hopelessness for PBN
 d.dep.t.avg(m1 = pbn_bhs_stats$b_bhs_sum_mean,
             m2 = pbn_bhs_stats$pi_bhs_sum_mean,
@@ -696,6 +746,13 @@ pbn_complete %>%
 #N and percent of intervention participants with sum score >3 (selects Agree and Strongly Agree only), reflect overall perceived SSI acceptability
 participants_with_followup_pfs %>%
   filter(treatment_group == TRUE) %>%
+  mutate(pi_pfs_sum_scores = pi_pfs_sum / 7, 
+         pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
+  summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
+
+#N and percent of control participants with sum score >3 (selects Agree and Strongly Agree only), reflect overall perceived SSI acceptability
+participants_with_followup_pfs %>%
+  filter(treatment_group == FALSE) %>%
   mutate(pi_pfs_sum_scores = pi_pfs_sum / 7, 
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
   summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
