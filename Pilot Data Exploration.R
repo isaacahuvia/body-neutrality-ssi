@@ -786,31 +786,31 @@ pfs_completers %>%
 #Histogram for body positivity
 ggplot(data=pfs_completers, aes(x=bn_bp_like)) +
   geom_histogram(binwidth = 1, color = "white", fill = "#F37068") +  
-  geom_vline(aes(xintercept=mean(bn_bp_like)),
-             color="#0F606B", linetype="dashed", size=1) +
   theme_classic() +
   ggtitle("Body Positivity Ratings") +
   xlab("Endorsement Rating") +
   theme(plot.title=element_text(hjust=0.5)) + 
   aes(y = after_stat(count)/sum(after_stat(count))) + 
-  scale_y_continuous(labels = scales::percent, name = "Percent of Sample")
+  scale_y_continuous(labels = scales::percent, name = "Percent of Sample") +
+  labs(caption = "M=2.99, SD=1.22") +
+  theme(plot.caption = element_text(hjust = 0.5))
 
 ##Means, standard deviations for body neutrality
 pfs_completers %>% 
   summarize(mean = mean(bn_bn_like),
             sd = sd(bn_bn_like))
 
-#Histogram for body neutrality
+#Histogram for body neutrality with mean line
 ggplot(data=pfs_completers, aes(x=bn_bn_like)) +
   geom_histogram(binwidth = 1, color = "white", fill = "#FFC24A") +  
-  geom_vline(aes(xintercept=mean(bn_bn_like)),
-             color="#0F606B", linetype="dashed", size=1) +
   theme_classic() +
   ggtitle("Body Neutrality Ratings") +
   xlab("Endorsement Rating") +
   theme(plot.title=element_text(hjust=0.5)) + 
   aes(y = after_stat(count)/sum(after_stat(count))) + 
-  scale_y_continuous(labels = scales::percent, name = "Percent of Sample")
+  scale_y_continuous(labels = scales::percent, name = "Percent of Sample") +
+  labs(caption = "M=4.33, SD=0.85") +
+  theme(plot.caption = element_text(hjust = 0.5))
 
 #t test
 t.test(pfs_completers$bn_bn_like, pfs_completers$bn_bp_like, paired = TRUE)
