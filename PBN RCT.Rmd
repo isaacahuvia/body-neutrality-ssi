@@ -7,7 +7,14 @@ output:
   pdf_document: default
 ---
 
+```{r}
+knitr::opts_knit$set(root.dir = "/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
+setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
+```
+
+
 ```{r setup}
+
 #Load required packages
 if(!require(tidyverse)){install.packages('tidyverse')}
 library(tidyverse)
@@ -32,34 +39,26 @@ library(qualtRics)
 if(!require(readxl)){install.packages('readxl')}
 library(readxl)
 
-#Set working directory
-setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline)")
-
 #Load data - #Using the .cols argument because otherwise some variables that should not be numeric are imported as such (e.g., demographics)
-original_survey_data <- read_survey("original_survey_data.csv", col_types = cols(.default ="c"))
-#original_survey_data <- read_survey("original_survey_data_choice_text.csv", col_types = cols(.default ="c")) tried choice text to see if it fixes how race/ethnicity and gender data is downloaded, but it does not
-new_survey_data <- read_survey("new_survey_data.csv", col_types = cols(.default ="c"))
-followup_data <- read_survey("followups_5.9.24.csv", col_types = cols(.default ="c")) 
-###WILL NEED TO UPDATE WITH FULL SAMPLE##
-
-#Load de-identified participant database
-participant_database <- file.choose() ###Importing the csv file from the lab server directly was being a pain, FIX LATER###
-participant_database <- read.csv(participant_database)
+original_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/original_baseline_survey_data.csv", col_types = cols(.default = "c"))
+new_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/new_baseline_survey_data.csv", col_types = cols(.default = "c"))
+followup_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/followup_survey_data.csv", col_types = cols(.default = "c")) 
+participant_database <- read.csv("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/participant_database.csv", stringsAsFactors = FALSE)
 ```
 
 ```{r merge data}
-#Merge original_survey_data (closed because of frauds) and new_survey_data
+#Merge original_baseline_survey_data (closed because of frauds) and new_baseline_survey_data
 
-#original_survey_data has 731 columns but new_survey_data has 729. Figure out the 2 differences
-cols_in_original_only <- setdiff(names(original_survey_data), names(new_survey_data))
+#original_baseline_survey_data has 731 columns but new_baseline_survey_data has 729. Figure out the 2 differences
+cols_in_original_only <- setdiff(names(original_baseline_survey_data), names(new_baseline_survey_data))
 print(cols_in_original_only)
 
-#Remove the 2 extra Qualtrics columns from original_survey_data (won't mess things up because they are at the end and don't have anything important)
-original_survey_data <- original_survey_data %>%
+#Remove the 2 extra Qualtrics columns from original_baseline_survey_data (won't mess things up because they are at the end and don't have anything important)
+original_baseline_survey_data <- original_baseline_survey_data %>%
   select(-Q_AmbiguousTextPresent, -Q_AmbiguousTextQuestions)
 
 #Now we can merge
-merged_data <- bind_rows(original_survey_data, new_survey_data)
+merged_data <- bind_rows(original_baseline_survey_data, new_baseline_survey_data)
 ```
 
 ```{r sample breakdowns}
