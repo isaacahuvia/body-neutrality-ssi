@@ -39,33 +39,33 @@ library(qualtRics)
 if(!require(readxl)){install.packages('readxl')}
 library(readxl)
 
-#Load data - #Using the .cols argument because otherwise some variables that should not be numeric are imported as such (e.g., demographics)
-original_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/original_baseline_survey_data.csv", col_types = cols(.default = "c"))
-new_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/new_baseline_survey_data.csv", col_types = cols(.default = "c"))
-followup_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/followup_survey_data.csv", col_types = cols(.default = "c")) 
-participant_database <- read.csv("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/participant_database.csv", stringsAsFactors = FALSE)
+#Load data - #Using the .cols argument because otherwise some variables that should not be numeric are imported as such (e.g.,  demographics)
+original_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/original_baseline_survey_data.csv",  col_types = cols(.default = "c"))
+new_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/new_baseline_survey_data.csv",  col_types = cols(.default = "c"))
+followup_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/followup_survey_data.csv",  col_types = cols(.default = "c")) 
+participant_database <- read.csv("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/participant_database.csv",  stringsAsFactors = FALSE)
 ```
 
 ```{r merge data}
 #Merge original_baseline_survey_data (closed because of frauds) and new_baseline_survey_data
 
 #original_baseline_survey_data has 731 columns but new_baseline_survey_data has 729. Figure out the 2 differences
-cols_in_original_only <- setdiff(names(original_baseline_survey_data), names(new_baseline_survey_data))
+cols_in_original_only <- setdiff(names(original_baseline_survey_data),  names(new_baseline_survey_data))
 print(cols_in_original_only)
 
 #Remove the 2 extra Qualtrics columns from original_baseline_survey_data (won't mess things up because they are at the end and don't have anything important)
 original_baseline_survey_data <- original_baseline_survey_data %>%
-  select(-Q_AmbiguousTextPresent, -Q_AmbiguousTextQuestions)
+  select(-Q_AmbiguousTextPresent,  -Q_AmbiguousTextQuestions)
 
 #Now we can merge
-merged_data <- bind_rows(original_baseline_survey_data, new_baseline_survey_data)
+merged_data <- bind_rows(original_baseline_survey_data,  new_baseline_survey_data)
 ```
 
 ```{r sample breakdowns}
 
-#The reason the numbers are weird below! We don't actually have a completer_baseline N of 250 because we decided after the fact to exclude 30 people that we already compensated. Probably need to put in a new word for the "brown No" within the excel itself (and make a new csv of it) so that I can also filter out the people we retroactively excluded (make sure this is done for completer_baseline and incomplete_baseline, but may not make a difference for incomplete_baseline)
+#The reason the numbers are weird below! We don't actually have a completer_baseline N of 250 because we decided after the fact to exclude 30 people that we already compensated.
 
-#Participants who submitted the baseline and passed data integrity checks
+#Participants who submitted the baseline, were compensated, and passed data integrity checks
 completer_baseline <- participant_database %>% 
   filter(Include.in.Analysis == "Yes" & Compensation.Date != "N/A")  
 n_completer_baseline <- nrow(completer_baseline)
@@ -83,41 +83,117 @@ incomplete_baseline <- participant_database %>%
 n_incomplete_baseline <- nrow(incomplete_baseline)
 #N=28
 
-#All participants who got randomized and passed the data integrity checks (regardless of intervention or baseline completion)
-randomized <- bind_rows(completer_baseline, incomplete_baseline)
+#Participants who got randomized and passed the data integrity checks (regardless of intervention or baseline completion)
+randomized <- bind_rows(completer_baseline,  incomplete_baseline)
 n_randomized <- nrow(randomized)
 #N=220
 
-#Intervention completers who pass data integrity checks
+#Participants who got randomized, passed data integrity checks, and completed their intervention
 merged_data <- merged_data %>%
   mutate(Participant_ID = as.character(Participant_ID))
 randomized <- randomized %>%
   mutate(Participant_ID = as.character(Participant_ID))
 completer_intervention <- merged_data %>% 
   filter(`Intervention Completed` == "Intervention Completed" | `Control Completed` == "Control Completed")  %>%
-  semi_join(randomized, by = "Participant_ID")
+  semi_join(randomized,  by = "Participant_ID")
 n_completer_intervention <- nrow(completer_intervention)
 #N=205
+
+#Participants who got randomized, passed data integrity checks, and did not completed their intervention
+incomplete_intervention <- merged_data %>%
+  filter((`Condition` == "Intervention" & (is.na(`Intervention Completed`) | `Intervention Completed` != "Intervention Completed")) | (`Condition` == "Control" & (is.na(`Control Completed`) | `Control Completed` != "Control Completed"))) %>%
+  semi_join(randomized,  by = "Participant_ID")
+n_incomplete_intervention <- nrow(incomplete_intervention)
+#N=15
+
+#Intervention group participants who passed data integrity checks (regardless of completion)
+randomized_intervention <- randomized  %>%
+  filter(Condition == "Intervention")
+n_randomized_intervention <- nrow(randomized_intervention)
+#N=105
+
+#Control group participants who passed data integrity checks (regardless of completion)
+randomized_control <- randomized  %>%
+  filter(Condition == "Control")
+n_randomized_control <- nrow(randomized_control)
+#N=115
+
+#Intervention group participants who passed data integrity checks and completed their intervention
+randomized_intervention_complete <- randomized_intervention %>%
+  select(Participant_ID) %>%
+  semi_join(completer_intervention %>% select(Participant_ID), by = "Participant_ID")
+n_randomized_intervention_complete <- nrow(randomized_intervention_complete)
+#N=100
+
+#Control group participants who passed data integrity checks and completed their intervention
+randomized_control_complete <- randomized_control %>%
+  select(Participant_ID) %>%
+  semi_join(completer_intervention %>% select(Participant_ID), by = "Participant_ID")
+n_randomized_control_complete <- nrow(randomized_control_complete)
+#N=105
+
+#Intervention group participants who passed data integrity checks and did not complete their intervention
+randomized_intervention_incomplete <- randomized_intervention %>%
+  select(Participant_ID) %>%
+  semi_join(incomplete_intervention %>% select(Participant_ID), by = "Participant_ID")
+n_randomized_intervention_incomplete <- nrow(randomized_intervention_incomplete)
+#N=5
+
+#Control group participants who passed data integrity checks and did not their intervention
+randomized_control_incomplete <- randomized_control %>%
+  select(Participant_ID) %>%
+  semi_join(incomplete_intervention %>% select(Participant_ID), by = "Participant_ID")
+n_randomized_control_incomplete <- nrow(randomized_control_incomplete)
+#N=10
+
+#Participants who received follow-up emails (have to hard code based on the listservs we created manually)
+invited_followup <- participant_database %>%
+ filter(Participant_ID %in% c(69913, 93022, 76432, 75263, 56815, 17052, 13023, 72038, 48022, 22684, 56590, 13302, 21313, 57955, 68198, 64531, 16855, 17670, 20364, 49102, 63743, 48593, 96225, 97410, 71632, 90795, 44268, 62193, 85350, 11827, 93664, 78161, 42215, 50466, 29614, 41799, 87127, 15065, 20973, 38572, 13638, 26776, 86023, 35047, 25638, 65863, 99374, 43295, 88046, 77450, 53220, 86114, 73614, 80888, 86314, 55845, 81514, 92289, 22584, 38538, 64719, 19199, 78881, 96320, 26869, 65509, 49236, 23158, 49034, 76870, 78040, 21842, 54988, 48970, 87771, 77719, 86763, 32309, 85344, 85411, 33280, 47331, 93980, 50401, 96007, 65187, 72626, 64019, 31188, 43258, 99949, 80941, 15777, 53969, 95004, 68267, 35553, 67236, 88241, 11868, 55765, 66912, 39606, 95389, 17032, 62781, 53863, 60501, 27455, 90947, 86804, 18348, 38488, 45565, 86300, 48031, 19978, 25643, 25987, 71511, 84417, 56534, 84267, 98233, 45789, 68200, 76371, 17149, 39743, 31067, 21592, 59978, 70500, 66920, 53611, 57517, 11308, 89229, 49864, 24314, 69311, 47321, 35067, 43097, 38601, 26551, 15025, 69898, 74462, 96711, 49908, 77121, 74951, 58830, 11290, 60126, 82287, 40376, 98726, 66481, 90314, 83329, 63962, 80569, 75164, 65322, 41917, 64886, 31849, 71675, 96986, 72424, 20457, 30277, 68213, 93863, 33504, 50884, 48434, 14806, 18169, 92104, 38713, 56049, 74139, 93764, 28301, 39455, 18974, 15333, 49399, 45841, 86883, 57712, 18856, 58650, 70371, 53775, 13842, 35756, 52326, 40397, 14617, 17231, 96120, 95674, 62516, 22485, 21140, 58776, 40077, 15186, 16432, 83679, 13649, 61437, 11697, 24378, 84608, 40889))
+n_invited_followup <- nrow(invited_followup)
+#N=220
+
+#Participants who completed the follow-up
+completed_followup <- participant_database %>%
+  filter(Follow.Up.Completion == "Yes")
+n_completed_followup <- nrow(completed_followup)
+#N=120
+
+#Participants who did not complete the follow-up
+incomplete_followup <- participant_database %>%
+  filter(Follow.Up.Completion != "Yes" & Include.in.Analysis == "Yes")
+n_incomplete_followup <- nrow(incomplete_followup)
+#N=100
+
+#Participants who were randomized but did not complete their intervention who did end up completing their follow-up
+completed_followup <- completed_followup %>%
+  mutate(Participant_ID = as.character(Participant_ID))
+incomplete_intervention_completed_followup <- incomplete_intervention %>%
+  select(Participant_ID) %>%
+  semi_join(completed_followup %>% select(Participant_ID), by = "Participant_ID")
+n_incomplete_intervention_completed_followup <- nrow(incomplete_intervention_completed_followup)
+#N=1
+
+#Participants who were randomized but did not complete their intervention who did not complete their follow-up
+incomplete_followup <- incomplete_followup %>%
+  mutate(Participant_ID = as.character(Participant_ID))
+incomplete_intervention_incomplete_followup <- incomplete_intervention %>%
+  select(Participant_ID) %>%
+  semi_join(incomplete_followup %>% select(Participant_ID), by = "Participant_ID")
+n_incomplete_intervention_incomplete_followup <- nrow(incomplete_intervention_incomplete_followup)
+#N=14
 ```
 
 ```{r}
-#In the baseline data, select the participants being included in analysis (per data integrity checks, should be N=220)
-included_participants <- merged_data %>%
-  filter(Participant_ID %in% c(40077, 15186, 11697, 95674, 40889, 84608, 61437, 16432, 22485, 24378, 21140, 58776, 13649, 83679, 62516, 52326, 20457, 39455, 64886, 35756, 65322, 86883, 72424, 92104, 33504, 38713, 96986, 28301, 14617, 14806, 93863, 13842, 31849, 74139, 53775, 57712, 96120, 49399, 45841, 40397, 75164, 71675, 30277, 58650, 18169, 41917, 50884, 70371, 48434, 18974, 18856, 17231, 56049, 68213, 93764, 15333, 98726, 80569, 63962, 66481, 40376, 83329, 90314, 59978, 66920, 35067, 15025, 77121, 89229, 82287, 96711, 11308, 53611, 57517, 47321, 43097, 74462, 11290, 49908, 24314, 69311, 70500, 49864, 69898, 74951, 38601, 60126, 26551, 58830, 21592, 17149, 31067, 39743, 71511, 45789, 84417, 56534, 98233, 84267, 68200, 76371, 45565, 48031, 19978, 25987, 38488, 25643, 86804, 86300, 18348, 90947, 53863, 17032, 60501, 27455, 62781, 88241, 55765, 39606, 66912, 67236, 11868, 68267, 35553, 95389, 80941, 15777, 53969, 95004, 43258, 64019, 99949, 72626, 47331, 50401, 96007, 65187, 31188, 93980, 76870, 32309, 85411, 85344, 48970, 54988, 49034, 77719, 78040, 86763, 33280, 23158, 87771, 21842, 19199, 96320, 64719, 78881, 49236, 26869, 65509, 38538, 73614, 80888, 55845, 86114, 22584, 81514, 92289, 86314, 65863, 77450, 25638, 88046, 99374, 13638, 35047, 38572, 26776, 86023, 43295, 20973, 53220, 29614, 62193, 42215, 41799, 93664, 50466, 78161, 85350, 87127, 15065, 11827, 63743, 20364, 17670, 44268, 48593, 96225, 71632, 97410, 90795, 49102, 68198, 16855, 64531, 13302, 57955, 21313, 13023, 69913, 75263, 93022, 48022, 22684, 17052, 72038, 56590, 56815, 76432))
 
-#In the follow-up data, select the included participants who have completed follow-up 
-###WILL NEED TO UPDATE WITH FULL SAMPLE###
-followup_data <- followup_data %>%
-  filter(Participant_ID %in% c(40077, 15186, 11697, 95674,40889, 84608, 61437, 16432, 21140, 58776, 62516, 20457, 39455, 35756, 65322, 72424, 38713, 96986, 28301, 14617, 14806, 93863, 13842, 31849, 57712, 45841, 40397, 75164, 71675, 58650, 41917, 50884, 48434, 18856, 17231, 56049, 68213, 93764, 15333, 98726, 80569, 63962, 40376, 83329, 90314, 59978, 66920, 35067, 89229, 82287, 96711, 11308, 53611, 57517, 74462, 24314, 69898, 74951, 38601, 60126, 58830, 17149, 31067, 98233, 84267, 45565, 48031, 19978, 25987, 38488, 86804, 86300, 18348, 17032, 60501, 88241, 39606, 67236, 11868,68267, 35553, 95389))
-#As of 5/9/24 compensation, this should only be N=82, but there are 105 rows because of duplicates. Get rid of duplicates (keeping the one with the most Progress, and if Progress is 100 for multiple, keeping most recent by RecordedDate). 
+#TO DO: At some point, will need to use the below code to get rid of duplicates in the actual follow-up data (above is using the participant database)
 followup_data_deduplicated <- followup_data %>%
   group_by(Participant_ID) %>%
-  arrange(desc(Progress), RecordedDate) %>%
+  arrange(desc(Progress),  RecordedDate) %>%
   slice(1)
 
 #Add the follow-up data to the baseline data. 
 participants_with_followup <- included_participants %>%
-  left_join(followup_data_deduplicated, by = "Participant_ID") #this includes people who are totally missing follow-up data, it just attaches the follow-up data for people who do have it (contrary to the number of observations here, this does not mean we have 220 follow-up completers)
+  left_join(followup_data_deduplicated,  by = "Participant_ID") #this includes people who are totally missing follow-up data,  it just attaches the follow-up data for people who do have it (contrary to the number of observations here,  this does not mean we have 220 follow-up completers)
 ```
 
 
@@ -126,88 +202,88 @@ participants_with_followup <- included_participants %>%
 #participants_with_followup %>% 
 #  mutate(
  #   across(
-  #    .cols = c(b_dem_gender, b_dem_race_ethnicity),
+  #    .cols = c(b_dem_gender,  b_dem_race_ethnicity), 
    #   .fns = as.factor
     #)
   #)
-###CAN CONSIDER USNG ABOVE FORMAT FOR ALL VARIABLES, BUT THEN DOESN'T RELABLE WITH TEXT NAMES
+###CAN CONSIDER USNG ABOVE FORMAT FOR ALL VARIABLES,  BUT THEN DOESN'T RELABLE WITH TEXT NAMES
 
 #Make necessary variables factors
-###STILL NEED TO DO GENDER AND RACE/ETHNICITY, SEE IF I CAN DOWNLOAD DATA BETTER###
+###STILL NEED TO DO GENDER AND RACE/ETHNICITY,  SEE IF I CAN DOWNLOAD DATA BETTER###
 participants_with_followup$b_dem_saab <- factor(
-participants_with_followup$b_dem_saab,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+participants_with_followup$b_dem_saab, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 participants_with_followup$b_dem_sexuality <- factor(
-  participants_with_followup$b_dem_sexuality,
-  levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
-  labels = c("Straight/Heterosexual", "Gay/Lesbian/Homosexual", "Bisexual", "Pansexual", "Queer", "Asexual", "Other (please specify)", "Unsure/Questioning", "I do not use a label", "I do not want to respond")
+  participants_with_followup$b_dem_sexuality, 
+  levels = c(1,  2,  3,  4,  5,  6,  7,  8,  9,  10), 
+  labels = c("Straight/Heterosexual",  "Gay/Lesbian/Homosexual",  "Bisexual",  "Pansexual",  "Queer",  "Asexual",  "Other (please specify)",  "Unsure/Questioning",  "I do not use a label",  "I do not want to respond")
 )
 participants_with_followup$b_dem_sex <- factor(
-  participants_with_followup$b_dem_sex,
-  levels = c(1, 2, 3),
-  labels = c("Male", "Female", "Intersex")
+  participants_with_followup$b_dem_sex, 
+  levels = c(1,  2,  3), 
+  labels = c("Male",  "Female",  "Intersex")
 )
 participants_with_followup$b_current_mood <- factor(
-  participants_with_followup$b_current_mood,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+  participants_with_followup$b_current_mood, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 participants_with_followup$b_past_mood <- factor(
-  participants_with_followup$b_past_mood,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+  participants_with_followup$b_past_mood, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 participants_with_followup$b_unmet_mood_now <- factor(
-  participants_with_followup$b_unmet_mood_now,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+  participants_with_followup$b_unmet_mood_now, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 participants_with_followup$b_unmet_mood_past <- factor(
-  participants_with_followup$b_unmet_mood_past,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+  participants_with_followup$b_unmet_mood_past, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 participants_with_followup$b_current_ed <- factor(
-  participants_with_followup$b_current_ed,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+  participants_with_followup$b_current_ed, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 participants_with_followup$b_past_ed <- factor(
-  participants_with_followup$b_past_ed,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+  participants_with_followup$b_past_ed, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 participants_with_followup$b_unmet_ed_now <- factor(
-  participants_with_followup$b_unmet_ed_now,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+  participants_with_followup$b_unmet_ed_now, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 participants_with_followup$b_unmet_ed_past <- factor(
-  participants_with_followup$b_unmet_ed_past,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+  participants_with_followup$b_unmet_ed_past, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 participants_with_followup$b_hunger_1 <- factor(
-  participants_with_followup$b_hunger_1,
-  levels = c(1, 2, 3),
-  labels = c("Never True", "Sometimes True", "Often True")
+  participants_with_followup$b_hunger_1, 
+  levels = c(1,  2,  3), 
+  labels = c("Never True",  "Sometimes True",  "Often True")
 )
 participants_with_followup$b_hunger_2 <- factor(
-  participants_with_followup$b_hunger_2,
-  levels = c(1, 2, 3),
-  labels = c("Never True", "Sometimes True", "Often True")
+  participants_with_followup$b_hunger_2, 
+  levels = c(1,  2,  3), 
+  labels = c("Never True",  "Sometimes True",  "Often True")
 )
 participants_with_followup$f_new_support_mood <- factor(
-  participants_with_followup$f_new_support_mood,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+  participants_with_followup$f_new_support_mood, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 participants_with_followup$f_new_support_ed <- factor(
-  participants_with_followup$f_new_support_ed,
-  levels = c(0, 1),
-  labels = c("No", "Yes")
+  participants_with_followup$f_new_support_ed, 
+  levels = c(0,  1), 
+  labels = c("No",  "Yes")
 )
 
 #Create a binary variable to identify the treatment group
@@ -224,87 +300,87 @@ participants_with_followup <- participants_with_followup %>%
 
 #Make necessary variables numeric
 participants_with_followup <- participants_with_followup %>%
-  mutate(across(c(pi_pfs_1:pi_pfs_7, starts_with("b_dem_age"), starts_with("b_bhs"), starts_with("b_shs_agency"),starts_with("b_biss"), starts_with("b_fas"), starts_with("b_biaaq"),  starts_with("b_chime"), starts_with("b_mfq"), starts_with("b_edeq"), starts_with("b_mddi"), starts_with("pi_bhs"), starts_with("pi_shs_agency"), starts_with("pi_biss"), starts_with("pi_fas"), starts_with("pi_biaaq"), starts_with("pi_chime"), starts_with("f_bhs"), starts_with("f_shs_agency"), starts_with("f_biss"), starts_with("f_fas"), starts_with("f_biaaq"),starts_with("f_chime"), starts_with("f_mfq"), starts_with("f_edeq"), starts_with("f_mddi")), 
+  mutate(across(c(pi_pfs_1:pi_pfs_7,  starts_with("b_dem_age"),  starts_with("b_bhs"),  starts_with("b_shs_agency"), starts_with("b_biss"),  starts_with("b_fas"),  starts_with("b_biaaq"),   starts_with("b_chime"),  starts_with("b_mfq"),  starts_with("b_edeq"),  starts_with("b_mddi"),  starts_with("pi_bhs"),  starts_with("pi_shs_agency"),  starts_with("pi_biss"),  starts_with("pi_fas"),  starts_with("pi_biaaq"),  starts_with("pi_chime"),  starts_with("f_bhs"),  starts_with("f_shs_agency"),  starts_with("f_biss"),  starts_with("f_fas"),  starts_with("f_biaaq"), starts_with("f_chime"),  starts_with("f_mfq"),  starts_with("f_edeq"),  starts_with("f_mddi")),  
                 as.numeric))
 ```
 
 ```{r make seperate dataframes for quant and qual data}
-#Dataframe for quantitative analysis (for the full included sample, regardless of completion or randomization)
+#Dataframe for quantitative analysis (for the full included sample,  regardless of completion or randomization)
 participants_with_followup_quant <- participants_with_followup %>%
-   select(Participant_ID, treatment_group, intervention_completed, starts_with(c("b_dem", "b_current", "b_past", "b_unmet", "b_hunger", "b_bhs", "b_shs_agency", "b_biss", "b_fas", "b_biaaq", "b_chime", "b_mfq", "b_edeq", "b_mddi", "pi_pfs", "pi_bhs", "pi_shs_agency", "pi_biss", "pi_fas", "pi_biaaq", "pi_chime", "f_new", "f_bhs", "f_shs_agency", "f_biss", "f_fas", "f_biaaq", "f_chime", "f_mfq", "f_edeq", "f_mddi"))) %>%
-  select(-contains("free"), -contains("TEXT"), -contains("_tim_"), -contains("pfs_like"), -contains("pfs_change"), -contains("pfs_other")) 
+   select(Participant_ID,  treatment_group,  intervention_completed,  starts_with(c("b_dem",  "b_current",  "b_past",  "b_unmet",  "b_hunger",  "b_bhs",  "b_shs_agency",  "b_biss",  "b_fas",  "b_biaaq",  "b_chime",  "b_mfq",  "b_edeq",  "b_mddi",  "pi_pfs",  "pi_bhs",  "pi_shs_agency",  "pi_biss",  "pi_fas",  "pi_biaaq",  "pi_chime",  "f_new",  "f_bhs",  "f_shs_agency",  "f_biss",  "f_fas",  "f_biaaq",  "f_chime",  "f_mfq",  "f_edeq",  "f_mddi"))) %>%
+  select(-contains("free"),  -contains("TEXT"),  -contains("_tim_"),  -contains("pfs_like"),  -contains("pfs_change"),  -contains("pfs_other")) 
 
-#Dataframe for qualitative analysis (for the full included sample, regardless of completion or randomization)
+#Dataframe for qualitative analysis (for the full included sample,  regardless of completion or randomization)
 participants_with_followup_qual <- participants_with_followup %>%
-  select(Participant_ID, treatment_group, intervention_completed, contains("free"), contains("TEXT"), contains("pfs_like"), contains("pfs_change"), -contains("pfs_other"))
+  select(Participant_ID,  treatment_group,  intervention_completed,  contains("free"),  contains("TEXT"),  contains("pfs_like"),  contains("pfs_change"),  -contains("pfs_other"))
 
-#Dataframe for program feedback analysis (completed all PFS items, regardless of randomization)
+#Dataframe for program feedback analysis (completed all PFS items,  regardless of randomization)
 participants_with_followup_pfs <- participants_with_followup %>%
   mutate(pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7) %>%
   filter(!is.na(pi_pfs_sum))
 
-#Table export: Help seeking and unmet treatment for the full included sample, regardless of completion or randomization
+#Table export: Help seeking and unmet treatment for the full included sample,  regardless of completion or randomization
 qual_help_seeking <- participants_with_followup_qual %>% 
-  select(Participant_ID, b_unmet_mood_free_1, b_unmet_mood_free_2, b_unmet_ed_free_1, b_unmet_ed_free_2)
-flextable::flextable(qual_help_seeking, cwidth = c(0.5,7,0.5))
-#write.xlsx(qual_help_seeking, "qual_help_seeking.xlsx")
+  select(Participant_ID,  b_unmet_mood_free_1,  b_unmet_mood_free_2,  b_unmet_ed_free_1,  b_unmet_ed_free_2)
+flextable::flextable(qual_help_seeking,  cwidth = c(0.5, 7, 0.5))
+#write.xlsx(qual_help_seeking,  "qual_help_seeking.xlsx")
 
 #Table export: Program feedback for the intervention group
 pfs_qual_intervention <- participants_with_followup_pfs %>%
   filter(treatment_group == TRUE) %>%
-   select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)
-flextable::flextable(pfs_qual_intervention, cwidth = c(0.5,7,0.5))
-#write.xlsx(pfs_qual_intervention, "pfs_qual_intervention.xlsx")
+   select(Participant_ID,  pi_pfs_like,  pi_pfs_change,  pi_pfs_other)
+flextable::flextable(pfs_qual_intervention,  cwidth = c(0.5, 7, 0.5))
+#write.xlsx(pfs_qual_intervention,  "pfs_qual_intervention.xlsx")
 ```
 
 ```{r create sum scores}
 #All relevant items are already reverse-scored in Qualtrics
 participants_with_followup_quant <- participants_with_followup_quant %>%
-  mutate(b_bhs_sum = b_bhs_1 + b_bhs_2 + b_bhs_3 + b_bhs_4,
-         pi_bhs_sum = pi_bhs_1 + pi_bhs_2 + pi_bhs_3 + pi_bhs_4,
-         f_bhs_sum = f_bhs_1 + f_bhs_2 + f_bhs_3 + f_bhs_4,
-         b_shs_agency_sum = b_shs_agency_1 + b_shs_agency_2 + b_shs_agency_3,
-         pi_shs_agency_sum = pi_shs_agency_1 + pi_shs_agency_2 + pi_shs_agency_3,
-         f_shs_agency_sum = f_shs_agency_1 + f_shs_agency_2 + f_shs_agency_3,
-         b_biss_sum = b_biss_1 + b_biss_2 + b_biss_3 + b_biss_4 +  b_biss_5 + b_biss_6,
-         pi_biss_sum = pi_biss_1 + pi_biss_2 + pi_biss_3 + pi_biss_4 +  pi_biss_5 + pi_biss_6,
-         f_biss_sum = f_biss_1 + f_biss_2 + f_biss_3 + f_biss_4 +  f_biss_5 + f_biss_6,
-         b_fas_sum = b_fas_1 + b_fas_2 + b_fas_3 + b_fas_4 + b_fas_5 + b_fas_6 + b_fas_7,
-         pi_fas_sum = pi_fas_1 + pi_fas_2 + pi_fas_3 + pi_fas_4 + pi_fas_5 + pi_fas_6 + pi_fas_7,
-         f_fas_sum = f_fas_1 + f_fas_2 + f_fas_3 + f_fas_4 + f_fas_5 + f_fas_6 + f_fas_7,
-         b_biaaq_sum = b_biaaq_1 + b_biaaq_2 + b_biaaq_3 + b_biaaq_4 + b_biaaq_5 + b_biaaq_6 + b_biaaq_7 + b_biaaq_8 + b_biaaq_9 + b_biaaq_10 + b_biaaq_11 + b_biaaq_12,
-         pi_biaaq_sum = pi_biaaq_1 + pi_biaaq_2 + pi_biaaq_3 + pi_biaaq_4 + pi_biaaq_5 + pi_biaaq_6 + pi_biaaq_7 + pi_biaaq_8 + pi_biaaq_9 + pi_biaaq_10 + pi_biaaq_11 + pi_biaaq_12, 
-        f_biaaq_sum = f_biaaq_1 + f_biaaq_2 + f_biaaq_3 + f_biaaq_4 + f_biaaq_5 + f_biaaq_6 + f_biaaq_7 + f_biaaq_8 + f_biaaq_9 + f_biaaq_10 + f_biaaq_11 + f_biaaq_12,
-         b_chime_sum = b_chime_1 + b_chime_2 + b_chime_3,
-         pi_chime_sum = pi_chime_1 + pi_chime_2 + pi_chime_3,
-         f_chime_sum = f_chime_1 + f_chime_2 + f_chime_3,
-         pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7,
-         b_mfq_sum = b_mfq_1 + b_mfq_2 + b_mfq_3 + b_mfq_4 + b_mfq_5 + b_mfq_6 + b_mfq_7 + b_mfq_8 + b_mfq_9 + b_mfq_10 + b_mfq_11 + b_mfq_12 + b_mfq_13, 
-         f_mfq_sum = f_mfq_1 + f_mfq_2 + f_mfq_3 + f_mfq_4 + f_mfq_5 + f_mfq_6 + f_mfq_7 + f_mfq_8 + f_mfq_9 + f_mfq_10 + f_mfq_11 + f_mfq_12 + f_mfq_13,
-         b_edeq_sum = b_edeq_1 + b_edeq_2 + b_edeq_3 + b_edeq_4 + b_edeq_5 + b_edeq_6 + b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10,
-         f_edeq_sum = f_edeq_1 + f_edeq_2 + f_edeq_3 + f_edeq_4 + f_edeq_5 + f_edeq_6 + f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10, 
-         b_mddi_sum = b_mddi_1 + b_mddi_2 + b_mddi_3 + b_mddi_4 + b_mddi_5 + b_mddi_6 + b_mddi_7 + b_mddi_8 + b_mddi_9 + b_mddi_10 + b_mddi_11 + b_mddi_12 + b_mddi_13,
+  mutate(b_bhs_sum = b_bhs_1 + b_bhs_2 + b_bhs_3 + b_bhs_4, 
+         pi_bhs_sum = pi_bhs_1 + pi_bhs_2 + pi_bhs_3 + pi_bhs_4, 
+         f_bhs_sum = f_bhs_1 + f_bhs_2 + f_bhs_3 + f_bhs_4, 
+         b_shs_agency_sum = b_shs_agency_1 + b_shs_agency_2 + b_shs_agency_3, 
+         pi_shs_agency_sum = pi_shs_agency_1 + pi_shs_agency_2 + pi_shs_agency_3, 
+         f_shs_agency_sum = f_shs_agency_1 + f_shs_agency_2 + f_shs_agency_3, 
+         b_biss_sum = b_biss_1 + b_biss_2 + b_biss_3 + b_biss_4 +  b_biss_5 + b_biss_6, 
+         pi_biss_sum = pi_biss_1 + pi_biss_2 + pi_biss_3 + pi_biss_4 +  pi_biss_5 + pi_biss_6, 
+         f_biss_sum = f_biss_1 + f_biss_2 + f_biss_3 + f_biss_4 +  f_biss_5 + f_biss_6, 
+         b_fas_sum = b_fas_1 + b_fas_2 + b_fas_3 + b_fas_4 + b_fas_5 + b_fas_6 + b_fas_7, 
+         pi_fas_sum = pi_fas_1 + pi_fas_2 + pi_fas_3 + pi_fas_4 + pi_fas_5 + pi_fas_6 + pi_fas_7, 
+         f_fas_sum = f_fas_1 + f_fas_2 + f_fas_3 + f_fas_4 + f_fas_5 + f_fas_6 + f_fas_7, 
+         b_biaaq_sum = b_biaaq_1 + b_biaaq_2 + b_biaaq_3 + b_biaaq_4 + b_biaaq_5 + b_biaaq_6 + b_biaaq_7 + b_biaaq_8 + b_biaaq_9 + b_biaaq_10 + b_biaaq_11 + b_biaaq_12, 
+         pi_biaaq_sum = pi_biaaq_1 + pi_biaaq_2 + pi_biaaq_3 + pi_biaaq_4 + pi_biaaq_5 + pi_biaaq_6 + pi_biaaq_7 + pi_biaaq_8 + pi_biaaq_9 + pi_biaaq_10 + pi_biaaq_11 + pi_biaaq_12,  
+        f_biaaq_sum = f_biaaq_1 + f_biaaq_2 + f_biaaq_3 + f_biaaq_4 + f_biaaq_5 + f_biaaq_6 + f_biaaq_7 + f_biaaq_8 + f_biaaq_9 + f_biaaq_10 + f_biaaq_11 + f_biaaq_12, 
+         b_chime_sum = b_chime_1 + b_chime_2 + b_chime_3, 
+         pi_chime_sum = pi_chime_1 + pi_chime_2 + pi_chime_3, 
+         f_chime_sum = f_chime_1 + f_chime_2 + f_chime_3, 
+         pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7, 
+         b_mfq_sum = b_mfq_1 + b_mfq_2 + b_mfq_3 + b_mfq_4 + b_mfq_5 + b_mfq_6 + b_mfq_7 + b_mfq_8 + b_mfq_9 + b_mfq_10 + b_mfq_11 + b_mfq_12 + b_mfq_13,  
+         f_mfq_sum = f_mfq_1 + f_mfq_2 + f_mfq_3 + f_mfq_4 + f_mfq_5 + f_mfq_6 + f_mfq_7 + f_mfq_8 + f_mfq_9 + f_mfq_10 + f_mfq_11 + f_mfq_12 + f_mfq_13, 
+         b_edeq_sum = b_edeq_1 + b_edeq_2 + b_edeq_3 + b_edeq_4 + b_edeq_5 + b_edeq_6 + b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10, 
+         f_edeq_sum = f_edeq_1 + f_edeq_2 + f_edeq_3 + f_edeq_4 + f_edeq_5 + f_edeq_6 + f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10,  
+         b_mddi_sum = b_mddi_1 + b_mddi_2 + b_mddi_3 + b_mddi_4 + b_mddi_5 + b_mddi_6 + b_mddi_7 + b_mddi_8 + b_mddi_9 + b_mddi_10 + b_mddi_11 + b_mddi_12 + b_mddi_13, 
          f_mddi_sum = f_mddi_1 + f_mddi_2 + f_mddi_3 + f_mddi_4 + f_mddi_5 + f_mddi_6 + f_mddi_7 + f_mddi_8 + f_mddi_9 + f_mddi_10 + f_mddi_11 + f_mddi_12 + f_mddi_13) 
 ```
 
 ```{r handling missing data prior to imputation}
 #Check program feedback completion
 participants_with_followup_quant %>% 
-  select(pi_pfs_1, pi_pfs_2, pi_pfs_3, pi_pfs_4, pi_pfs_5, pi_pfs_6, pi_pfs_7) %>% 
+  select(pi_pfs_1,  pi_pfs_2,  pi_pfs_3,  pi_pfs_4,  pi_pfs_5,  pi_pfs_6,  pi_pfs_7) %>% 
   vis_miss()
-#Looks like there is one participant who completed items 2-8 but not item 1, need to find them:
+#Looks like there is one participant who completed items 2-8 but not item 1,  need to find them:
 participants_with_followup_quant_pfs_missing <- participants_with_followup_quant %>%
   filter(!is.na(pi_pfs_1) | !is.na(pi_pfs_2) | !is.na(pi_pfs_3) | !is.na(pi_pfs_4) | !is.na(pi_pfs_5) | !is.na(pi_pfs_6) | !is.na(pi_pfs_7))
 #Identify the one different participant ID:
-missing_participant_ids <- setdiff(participants_with_followup_quant_pfs_missing$Participant_ID, participants_with_followup_pfs$Participant_ID)
+missing_participant_ids <- setdiff(participants_with_followup_quant_pfs_missing$Participant_ID,  participants_with_followup_pfs$Participant_ID)
 print(missing_participant_ids)
-#The participant with missing PFS data is 64531. Since it is only one participant (everyone else either did the whole scale or skipped it completely), we will just drop them from PFS analyses. 
+#The participant with missing PFS data is 64531. Since it is only one participant (everyone else either did the whole scale or skipped it completely),  we will just drop them from PFS analyses. 
 
 #Identify participants with greater than 5% missing baseline primary outcomes data
-#For each participant, add a new column that calculates the percent missing of baseline primary outcome items
+#For each participant,  add a new column that calculates the percent missing of baseline primary outcome items
 participants_with_followup_quant <- participants_with_followup_quant %>%
   mutate(percent_missing = rowMeans(
-    is.na(select(participants_with_followup_quant, b_mfq_1, b_mfq_2, b_mfq_3, b_mfq_4, b_mfq_5, b_mfq_6, b_mfq_7, b_mfq_8, b_mfq_9, b_mfq_10, b_mfq_11, b_mfq_12, b_mfq_13, b_edeq_1, b_edeq_2, b_edeq_3, b_edeq_4, b_edeq_5, b_edeq_6, b_edeq_7, b_edeq_8, b_edeq_9, b_edeq_10)), 
+    is.na(select(participants_with_followup_quant,  b_mfq_1,  b_mfq_2,  b_mfq_3,  b_mfq_4,  b_mfq_5,  b_mfq_6,  b_mfq_7,  b_mfq_8,  b_mfq_9,  b_mfq_10,  b_mfq_11,  b_mfq_12,  b_mfq_13,  b_edeq_1,  b_edeq_2,  b_edeq_3,  b_edeq_4,  b_edeq_5,  b_edeq_6,  b_edeq_7,  b_edeq_8,  b_edeq_9,  b_edeq_10)),  
     na.rm = TRUE)) %>%
   mutate(percent_missing = percent_missing * 100)
 
@@ -314,11 +390,11 @@ participants_with_followup_quant <- participants_with_followup_quant %>%
 #Remove participants where more_than_5_percent_missing is TRUE
 participants_with_followup_quant <- participants_with_followup_quant %>%
   filter(!more_than_5_percent_missing)
-#In sum, there were originally 220 participants_with_followup_quant and now there are 218 (only had to drop two participants prior to imputation)
+#In sum,  there were originally 220 participants_with_followup_quant and now there are 218 (only had to drop two participants prior to imputation)
 
 #Drop remaining columns that are not useful for imputation
 participants_with_followup_quant_for_imputation <- participants_with_followup_quant %>%
-  select(-Participant_ID, -contains("percent_missing"))
+  select(-Participant_ID,  -contains("percent_missing"))
 ```
 
 ```{r imputation}
@@ -327,19 +403,19 @@ set.seed(12345) #use the same seed number each time to make the code reproducibl
 #x below will be the analysis-ready dataset with
 #imputed_data <- missForest(participants_with_followup_quant_for_imputation)
 #imputed_data <- as.data.frame(imputed_data$ximp)
-#imputed_data <- round(imputed_data) #Since the algorithm introduces decimals which is not appropriate for this data, round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this. 
-#TO DO: Also, make sure to print error estimates for manuscript
+#imputed_data <- round(imputed_data) #Since the algorithm introduces decimals which is not appropriate for this data,  round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this. 
+#TO DO: Also,  make sure to print error estimates for manuscript
 ```
 
 ```{r create complete data frames}
 #Filter for proximal outcomes completers 
-###NOTE TO SELF### - Since we will be imputing data, filtering for cases with complete proximal outcomes might eventually not be necessary. However, we may want to keep for a robustness check.
+###NOTE TO SELF### - Since we will be imputing data,  filtering for cases with complete proximal outcomes might eventually not be necessary. However,  we may want to keep for a robustness check.
 participants_with_followup_quant_complete_proximal <- participants_with_followup_quant %>%
-  select(Participant_ID, b_bhs_sum, pi_bhs_sum, b_shs_agency_sum, pi_shs_agency_sum, b_biss_sum, pi_biss_sum, b_fas_sum, pi_fas_sum, b_biaaq_sum, pi_biaaq_sum, b_chime_sum, pi_chime_sum, pi_pfs_sum)%>% 
+  select(Participant_ID,  b_bhs_sum,  pi_bhs_sum,  b_shs_agency_sum,  pi_shs_agency_sum,  b_biss_sum,  pi_biss_sum,  b_fas_sum,  pi_fas_sum,  b_biaaq_sum,  pi_biaaq_sum,  b_chime_sum,  pi_chime_sum,  pi_pfs_sum)%>% 
 filter(complete.cases(.))
 
 participants_with_followup_quant_complete_proximal <- participants_with_followup_quant %>%
-  semi_join(participants_with_followup_quant_complete_proximal, by = "Participant_ID")
+  semi_join(participants_with_followup_quant_complete_proximal,  by = "Participant_ID")
 
 #Create a dataframe with complete PBN participants only
 pbn_complete <- participants_with_followup_quant_complete_proximal %>%
@@ -353,52 +429,52 @@ control_complete <- participants_with_followup_quant_complete_proximal %>%
 ```{r descriptives for proximal outcomes}
 descriptives <- participants_with_followup_quant_complete_proximal %>%
   group_by(treatment_group) %>%
-  summarize(across(c(b_bhs_sum, pi_bhs_sum, b_shs_agency_sum, pi_shs_agency_sum, b_biss_sum, pi_biss_sum, b_fas_sum, pi_fas_sum, b_biaaq_sum, pi_biaaq_sum, b_chime_sum, pi_chime_sum, pi_pfs_sum), 
-                   list(mean = mean, sd = sd)))
+  summarize(across(c(b_bhs_sum,  pi_bhs_sum,  b_shs_agency_sum,  pi_shs_agency_sum,  b_biss_sum,  pi_biss_sum,  b_fas_sum,  pi_fas_sum,  b_biaaq_sum,  pi_biaaq_sum,  b_chime_sum,  pi_chime_sum,  pi_pfs_sum),  
+                   list(mean = mean,  sd = sd)))
 print(descriptives)
 ```
 
 ```{r regressions for pre-post proximal outcomes}
 #Hopelessness
-lm_bhs <- lm(pi_bhs_sum ~ b_bhs_sum + treatment_group, data = participants_with_followup_quant_complete_proximal)
+lm_bhs <- lm(pi_bhs_sum ~ b_bhs_sum + treatment_group,  data = participants_with_followup_quant_complete_proximal)
 summary(lm_bhs)
-coeftest(lm_bhs, vcov = sandwich)
-coefci(lm_bhs, vcov = sandwich)
+coeftest(lm_bhs,  vcov = sandwich)
+coefci(lm_bhs,  vcov = sandwich)
 #Significant effect of treatment_group (p<0.001) in the expected direction (negative)
 
 #Agency
-lm_shs_agency <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + treatment_group, data = participants_with_followup_quant_complete_proximal)
+lm_shs_agency <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + treatment_group,  data = participants_with_followup_quant_complete_proximal)
 summary(lm_shs_agency)
-coeftest(lm_shs_agency, vcov = sandwich)
-coefci(lm_shs_agency, vcov = sandwich)
+coeftest(lm_shs_agency,  vcov = sandwich)
+coefci(lm_shs_agency,  vcov = sandwich)
 #Significant effect of treatment_group (p<0.05) in the expected direction (positive)
 
 #Body image state
-lm_biss <- lm(pi_biss_sum ~ b_biss_sum + treatment_group, data = participants_with_followup_quant_complete_proximal)
+lm_biss <- lm(pi_biss_sum ~ b_biss_sum + treatment_group,  data = participants_with_followup_quant_complete_proximal)
 summary(lm_biss)
-coeftest(lm_biss, vcov = sandwich)
-coefci(lm_biss, vcov = sandwich)
+coeftest(lm_biss,  vcov = sandwich)
+coefci(lm_biss,  vcov = sandwich)
 #Significant effect of treatment_group (p<0.001) in the expected direction (positive)
 
 #Functionality appreciation 
-lm_fas <- lm(pi_fas_sum ~ b_fas_sum + treatment_group, data = participants_with_followup_quant_complete_proximal)
+lm_fas <- lm(pi_fas_sum ~ b_fas_sum + treatment_group,  data = participants_with_followup_quant_complete_proximal)
 summary(lm_fas)
-coeftest(lm_fas, vcov = sandwich)
-coefci(lm_fas, vcov = sandwich)
+coeftest(lm_fas,  vcov = sandwich)
+coefci(lm_fas,  vcov = sandwich)
 #Significant effect of treatment_group (p<0.001) in the expected direction (positive)
 
 #Body image flexibility - EXPLORATORY
-lm_biaaq <- lm(pi_biaaq_sum ~ b_biaaq_sum + treatment_group, data = participants_with_followup_quant_complete_proximal)
+lm_biaaq <- lm(pi_biaaq_sum ~ b_biaaq_sum + treatment_group,  data = participants_with_followup_quant_complete_proximal)
 summary(lm_biaaq)
-coeftest(lm_biaaq, vcov = sandwich)
-coefci(lm_biaaq, vcov = sandwich)
+coeftest(lm_biaaq,  vcov = sandwich)
+coefci(lm_biaaq,  vcov = sandwich)
 #Significant effect of treatment_group (p<0.05) in the expected direction (positive)
 
 #Body-related mindfulness - EXPLORATORY
-lm_chime <- lm(pi_chime_sum ~ b_chime_sum + treatment_group, data = participants_with_followup_quant_complete_proximal)
+lm_chime <- lm(pi_chime_sum ~ b_chime_sum + treatment_group,  data = participants_with_followup_quant_complete_proximal)
 summary(lm_chime)
-coeftest(lm_chime, vcov = sandwich)
-coefci(lm_chime, vcov = sandwich)
+coeftest(lm_chime,  vcov = sandwich)
+coefci(lm_chime,  vcov = sandwich)
 #No significant effect of treatment_group (p>0.05)
 ```
 
@@ -413,13 +489,13 @@ sqrt(vif(lm_chime))
 #All pass
 
 #Linearity of data
-plot(lm_bhs, 1)
-plot(lm_shs_agency, 1)
-plot(lm_biss, 1)
-plot(lm_fas, 1)
-plot(lm_biaaq, 1)
-plot(lm_chime, 1)
-#I think most of these look ok, maybe square predictors to fix?
+plot(lm_bhs,  1)
+plot(lm_shs_agency,  1)
+plot(lm_biss,  1)
+plot(lm_fas,  1)
+plot(lm_biaaq,  1)
+plot(lm_chime,  1)
+#I think most of these look ok,  maybe square predictors to fix?
 
 #Independence of predictors - p should be > 0.05
 durbinWatsonTest(lm_bhs)
@@ -430,12 +506,12 @@ durbinWatsonTest(lm_biaaq)
 durbinWatsonTest(lm_chime) #Hit or miss
 
 #Homoscedasticity - p should be > 0.05 for ncv and bp - we are accounting for the issue this by using the sandwich package above
-plot(lm_bhs, 3) 
-plot(lm_shs_agency, 3)
-plot(lm_biss, 3) 
-plot(lm_fas, 3)
-plot(lm_biaaq, 3)
-plot(lm_chime, 3)
+plot(lm_bhs,  3) 
+plot(lm_shs_agency,  3)
+plot(lm_biss,  3) 
+plot(lm_fas,  3)
+plot(lm_biaaq,  3)
+plot(lm_chime,  3)
 ncvTest(lm_bhs) 
 ncvTest(lm_shs_agency)
 ncvTest(lm_biss)
@@ -460,270 +536,270 @@ ols_plot_resid_qq(lm_chime)
 ```
 
 ```{r calculating effect sizes}
-#First, calculate descriptives for change scores
+#First,  calculate descriptives for change scores
 
 ##Hopelessness for PBN
 pbn_bhs_stats <- pbn_complete %>%
-  select(b_bhs_sum, pi_bhs_sum) %>%
+  select(b_bhs_sum,  pi_bhs_sum) %>%
   mutate(bhs_sum_change = pi_bhs_sum - b_bhs_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Hopelessness for Control
 control_bhs_stats <- control_complete %>%
-  select(b_bhs_sum, pi_bhs_sum) %>%
+  select(b_bhs_sum,  pi_bhs_sum) %>%
   mutate(bhs_sum_change = pi_bhs_sum - b_bhs_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Agency for PBN
 pbn_shs_agency_stats <- pbn_complete %>%
-  select(b_shs_agency_sum, pi_shs_agency_sum) %>%
+  select(b_shs_agency_sum,  pi_shs_agency_sum) %>%
   mutate(shs_agency_sum_change = pi_shs_agency_sum - b_shs_agency_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Agency for Control
 control_shs_agency_stats <- control_complete %>%
-  select(b_shs_agency_sum, pi_shs_agency_sum) %>%
+  select(b_shs_agency_sum,  pi_shs_agency_sum) %>%
   mutate(shs_agency_sum_change = pi_shs_agency_sum - b_shs_agency_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Body image state for PBN
 pbn_biss_stats <- pbn_complete %>%
-  select(b_biss_sum, pi_biss_sum) %>%
+  select(b_biss_sum,  pi_biss_sum) %>%
   mutate(biss_sum_change = pi_biss_sum - b_biss_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Body image state for Control
 control_biss_stats <- control_complete %>%
-  select(b_biss_sum, pi_biss_sum) %>%
+  select(b_biss_sum,  pi_biss_sum) %>%
   mutate(biss_sum_change = pi_biss_sum - b_biss_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Functionality appreciation for PBN
 pbn_fas_stats <- pbn_complete %>%
-  select(b_fas_sum, pi_fas_sum) %>%
+  select(b_fas_sum,  pi_fas_sum) %>%
   mutate(fas_sum_change = pi_fas_sum - b_fas_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Functionality appreciation for Control
 control_fas_stats <- control_complete %>%
-  select(b_fas_sum, pi_fas_sum) %>%
+  select(b_fas_sum,  pi_fas_sum) %>%
   mutate(fas_sum_change = pi_fas_sum - b_fas_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Body image flexibility for PBN
 pbn_biaaq_stats <- pbn_complete %>%
-  select(b_biaaq_sum, pi_biaaq_sum) %>%
+  select(b_biaaq_sum,  pi_biaaq_sum) %>%
   mutate(biaaq_sum_change = pi_biaaq_sum - b_biaaq_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Body image flexibility for Control
 control_biaaq_stats <- control_complete %>%
-  select(b_biaaq_sum, pi_biaaq_sum) %>%
+  select(b_biaaq_sum,  pi_biaaq_sum) %>%
   mutate(biaaq_sum_change = pi_biaaq_sum - b_biaaq_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Body-related mindfulness for PBN
 pbn_chime_stats <- pbn_complete %>%
-  select(b_chime_sum, pi_chime_sum) %>%
+  select(b_chime_sum,  pi_chime_sum) %>%
   mutate(chime_sum_change = pi_chime_sum - b_chime_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Body-related mindfulness for Control
 control_chime_stats <- control_complete %>%
-  select(b_chime_sum, pi_chime_sum) %>%
+  select(b_chime_sum,  pi_chime_sum) %>%
   mutate(chime_sum_change = pi_chime_sum - b_chime_sum) %>%
-  summarize(n = n(),
-            across(everything(), list(mean = mean, sd = sd))) 
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
 
 #Within-person effect sizes
 
 ###PROBABLY SHOULD ALSO CALCULATE dz PER LAB STANDARDS###
 
 ##Hopelessness for PBN
-d.dep.t.avg(m1 = pbn_bhs_stats$b_bhs_sum_mean,
-            m2 = pbn_bhs_stats$pi_bhs_sum_mean,
-            sd1 = pbn_bhs_stats$b_bhs_sum_sd,
-            sd2 = pbn_bhs_stats$pi_bhs_sum_sd,
-            n = pbn_bhs_stats$n,
+d.dep.t.avg(m1 = pbn_bhs_stats$b_bhs_sum_mean, 
+            m2 = pbn_bhs_stats$pi_bhs_sum_mean, 
+            sd1 = pbn_bhs_stats$b_bhs_sum_sd, 
+            sd2 = pbn_bhs_stats$pi_bhs_sum_sd, 
+            n = pbn_bhs_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Hopelessness for Control
-d.dep.t.avg(m1 = control_bhs_stats$b_bhs_sum_mean,
-            m2 = control_bhs_stats$pi_bhs_sum_mean,
-            sd1 = control_bhs_stats$b_bhs_sum_sd,
-            sd2 = control_bhs_stats$pi_bhs_sum_sd,
-            n = control_bhs_stats$n,
+d.dep.t.avg(m1 = control_bhs_stats$b_bhs_sum_mean, 
+            m2 = control_bhs_stats$pi_bhs_sum_mean, 
+            sd1 = control_bhs_stats$b_bhs_sum_sd, 
+            sd2 = control_bhs_stats$pi_bhs_sum_sd, 
+            n = control_bhs_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Agency for PBN
-d.dep.t.avg(m1 = pbn_shs_agency_stats$b_shs_agency_sum_mean,
-            m2 = pbn_shs_agency_stats$pi_shs_agency_sum_mean,
-            sd1 = pbn_shs_agency_stats$b_shs_agency_sum_sd,
-            sd2 = pbn_shs_agency_stats$pi_shs_agency_sum_sd,
-            n = pbn_shs_agency_stats$n,
+d.dep.t.avg(m1 = pbn_shs_agency_stats$b_shs_agency_sum_mean, 
+            m2 = pbn_shs_agency_stats$pi_shs_agency_sum_mean, 
+            sd1 = pbn_shs_agency_stats$b_shs_agency_sum_sd, 
+            sd2 = pbn_shs_agency_stats$pi_shs_agency_sum_sd, 
+            n = pbn_shs_agency_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Agency for Control
-d.dep.t.avg(m1 = control_shs_agency_stats$b_shs_agency_sum_mean,
-            m2 = control_shs_agency_stats$pi_shs_agency_sum_mean,
-            sd1 = control_shs_agency_stats$b_shs_agency_sum_sd,
-            sd2 = control_shs_agency_stats$pi_shs_agency_sum_sd,
-            n = control_shs_agency_stats$n,
+d.dep.t.avg(m1 = control_shs_agency_stats$b_shs_agency_sum_mean, 
+            m2 = control_shs_agency_stats$pi_shs_agency_sum_mean, 
+            sd1 = control_shs_agency_stats$b_shs_agency_sum_sd, 
+            sd2 = control_shs_agency_stats$pi_shs_agency_sum_sd, 
+            n = control_shs_agency_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Body image state for PBN
-d.dep.t.avg(m1 = pbn_biss_stats$b_biss_sum_mean,
-            m2 = pbn_biss_stats$pi_biss_sum_mean,
-            sd1 = pbn_biss_stats$b_biss_sum_sd,
-            sd2 = pbn_biss_stats$pi_biss_sum_sd,
-            n = pbn_biss_stats$n,
+d.dep.t.avg(m1 = pbn_biss_stats$b_biss_sum_mean, 
+            m2 = pbn_biss_stats$pi_biss_sum_mean, 
+            sd1 = pbn_biss_stats$b_biss_sum_sd, 
+            sd2 = pbn_biss_stats$pi_biss_sum_sd, 
+            n = pbn_biss_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Body image state for Control
-d.dep.t.avg(m1 = control_biss_stats$b_biss_sum_mean,
-            m2 = control_biss_stats$pi_biss_sum_mean,
-            sd1 = control_biss_stats$b_biss_sum_sd,
-            sd2 = control_biss_stats$pi_biss_sum_sd,
-            n = control_biss_stats$n,
+d.dep.t.avg(m1 = control_biss_stats$b_biss_sum_mean, 
+            m2 = control_biss_stats$pi_biss_sum_mean, 
+            sd1 = control_biss_stats$b_biss_sum_sd, 
+            sd2 = control_biss_stats$pi_biss_sum_sd, 
+            n = control_biss_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Functionality appreciation for PBN
-d.dep.t.avg(m1 = pbn_fas_stats$b_fas_sum_mean,
-            m2 = pbn_fas_stats$pi_fas_sum_mean,
-            sd1 = pbn_fas_stats$b_fas_sum_sd,
-            sd2 = pbn_fas_stats$pi_fas_sum_sd,
-            n = pbn_fas_stats$n,
+d.dep.t.avg(m1 = pbn_fas_stats$b_fas_sum_mean, 
+            m2 = pbn_fas_stats$pi_fas_sum_mean, 
+            sd1 = pbn_fas_stats$b_fas_sum_sd, 
+            sd2 = pbn_fas_stats$pi_fas_sum_sd, 
+            n = pbn_fas_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Functionality appreciation for Control
-d.dep.t.avg(m1 = control_fas_stats$b_fas_sum_mean,
-            m2 = control_fas_stats$pi_fas_sum_mean,
-            sd1 = control_fas_stats$b_fas_sum_sd,
-            sd2 = control_fas_stats$pi_fas_sum_sd,
-            n = control_fas_stats$n,
+d.dep.t.avg(m1 = control_fas_stats$b_fas_sum_mean, 
+            m2 = control_fas_stats$pi_fas_sum_mean, 
+            sd1 = control_fas_stats$b_fas_sum_sd, 
+            sd2 = control_fas_stats$pi_fas_sum_sd, 
+            n = control_fas_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Body image flexibility for PBN
-d.dep.t.avg(m1 = pbn_biaaq_stats$b_biaaq_sum_mean,
-            m2 = pbn_biaaq_stats$pi_biaaq_sum_mean,
-            sd1 = pbn_biaaq_stats$b_biaaq_sum_sd,
-            sd2 = pbn_biaaq_stats$pi_biaaq_sum_sd,
-            n = pbn_biaaq_stats$n,
+d.dep.t.avg(m1 = pbn_biaaq_stats$b_biaaq_sum_mean, 
+            m2 = pbn_biaaq_stats$pi_biaaq_sum_mean, 
+            sd1 = pbn_biaaq_stats$b_biaaq_sum_sd, 
+            sd2 = pbn_biaaq_stats$pi_biaaq_sum_sd, 
+            n = pbn_biaaq_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Body image flexibility for Control
-d.dep.t.avg(m1 = control_biaaq_stats$b_biaaq_sum_mean,
-            m2 = control_biaaq_stats$pi_biaaq_sum_mean,
-            sd1 = control_biaaq_stats$b_biaaq_sum_sd,
-            sd2 = control_biaaq_stats$pi_biaaq_sum_sd,
-            n = control_biaaq_stats$n,
+d.dep.t.avg(m1 = control_biaaq_stats$b_biaaq_sum_mean, 
+            m2 = control_biaaq_stats$pi_biaaq_sum_mean, 
+            sd1 = control_biaaq_stats$b_biaaq_sum_sd, 
+            sd2 = control_biaaq_stats$pi_biaaq_sum_sd, 
+            n = control_biaaq_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Body-related mindfulness for PBN
-d.dep.t.avg(m1 = pbn_chime_stats$b_chime_sum_mean,
-            m2 = pbn_chime_stats$pi_chime_sum_mean,
-            sd1 = pbn_chime_stats$b_chime_sum_sd,
-            sd2 = pbn_chime_stats$pi_chime_sum_sd,
-            n = pbn_chime_stats$n,
+d.dep.t.avg(m1 = pbn_chime_stats$b_chime_sum_mean, 
+            m2 = pbn_chime_stats$pi_chime_sum_mean, 
+            sd1 = pbn_chime_stats$b_chime_sum_sd, 
+            sd2 = pbn_chime_stats$pi_chime_sum_sd, 
+            n = pbn_chime_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 ##Body-related mindfulness for Control
-d.dep.t.avg(m1 = control_chime_stats$b_chime_sum_mean,
-            m2 = control_chime_stats$pi_chime_sum_mean,
-            sd1 = control_chime_stats$b_chime_sum_sd,
-            sd2 = control_chime_stats$pi_chime_sum_sd,
-            n = control_chime_stats$n,
+d.dep.t.avg(m1 = control_chime_stats$b_chime_sum_mean, 
+            m2 = control_chime_stats$pi_chime_sum_mean, 
+            sd1 = control_chime_stats$b_chime_sum_sd, 
+            sd2 = control_chime_stats$pi_chime_sum_sd, 
+            n = control_chime_stats$n, 
             a = .05) %>%
   pluck("estimate")
 
 #Between-person effect sizes
 
 ##Hopelessness
-d.ind.t(m1 = pbn_bhs_stats$bhs_sum_change_mean, 
-        m2 = control_bhs_stats$bhs_sum_change_mean, 
-        sd1 = pbn_bhs_stats$bhs_sum_change_sd, 
-        sd2 = control_bhs_stats$bhs_sum_change_sd, 
-        n1 = pbn_bhs_stats$n, 
-        n2 = control_bhs_stats$n, 
+d.ind.t(m1 = pbn_bhs_stats$bhs_sum_change_mean,  
+        m2 = control_bhs_stats$bhs_sum_change_mean,  
+        sd1 = pbn_bhs_stats$bhs_sum_change_sd,  
+        sd2 = control_bhs_stats$bhs_sum_change_sd,  
+        n1 = pbn_bhs_stats$n,  
+        n2 = control_bhs_stats$n,  
         a = 0.05) %>%
   pluck("estimate")
 
 ##Agency
-d.ind.t(m1 = pbn_shs_agency_stats$shs_agency_sum_change_mean, 
-        m2 = control_shs_agency_stats$shs_agency_sum_change_mean, 
-        sd1 = pbn_shs_agency_stats$shs_agency_sum_change_sd, 
-        sd2 = control_shs_agency_stats$shs_agency_sum_change_sd, 
-        n1 = pbn_shs_agency_stats$n, 
-        n2 = control_shs_agency_stats$n, 
+d.ind.t(m1 = pbn_shs_agency_stats$shs_agency_sum_change_mean,  
+        m2 = control_shs_agency_stats$shs_agency_sum_change_mean,  
+        sd1 = pbn_shs_agency_stats$shs_agency_sum_change_sd,  
+        sd2 = control_shs_agency_stats$shs_agency_sum_change_sd,  
+        n1 = pbn_shs_agency_stats$n,  
+        n2 = control_shs_agency_stats$n,  
         a = 0.05) %>%
   pluck("estimate")
 
 ##Body image state
-d.ind.t(m1 = pbn_biss_stats$biss_sum_change_mean, 
-        m2 = control_biss_stats$biss_sum_change_mean, 
-        sd1 = pbn_biss_stats$biss_sum_change_sd, 
-        sd2 = control_biss_stats$biss_sum_change_sd, 
-        n1 = pbn_biss_stats$n, 
-        n2 = control_biss_stats$n, 
+d.ind.t(m1 = pbn_biss_stats$biss_sum_change_mean,  
+        m2 = control_biss_stats$biss_sum_change_mean,  
+        sd1 = pbn_biss_stats$biss_sum_change_sd,  
+        sd2 = control_biss_stats$biss_sum_change_sd,  
+        n1 = pbn_biss_stats$n,  
+        n2 = control_biss_stats$n,  
         a = 0.05) %>%
   pluck("estimate")
 
 ##Functionality appreciation
-d.ind.t(m1 = pbn_fas_stats$fas_sum_change_mean, 
-        m2 = control_fas_stats$fas_sum_change_mean, 
-        sd1 = pbn_fas_stats$fas_sum_change_sd, 
-        sd2 = control_fas_stats$fas_sum_change_sd, 
-        n1 = pbn_fas_stats$n, 
-        n2 = control_fas_stats$n, 
+d.ind.t(m1 = pbn_fas_stats$fas_sum_change_mean,  
+        m2 = control_fas_stats$fas_sum_change_mean,  
+        sd1 = pbn_fas_stats$fas_sum_change_sd,  
+        sd2 = control_fas_stats$fas_sum_change_sd,  
+        n1 = pbn_fas_stats$n,  
+        n2 = control_fas_stats$n,  
         a = 0.05) %>%
   pluck("estimate")
 
 ##Body image flexibility
-d.ind.t(m1 = pbn_biaaq_stats$biaaq_sum_change_mean, 
-        m2 = control_biaaq_stats$biaaq_sum_change_mean, 
-        sd1 = pbn_biaaq_stats$biaaq_sum_change_sd, 
-        sd2 = control_biaaq_stats$biaaq_sum_change_sd, 
-        n1 = pbn_biaaq_stats$n, 
-        n2 = control_biaaq_stats$n, 
+d.ind.t(m1 = pbn_biaaq_stats$biaaq_sum_change_mean,  
+        m2 = control_biaaq_stats$biaaq_sum_change_mean,  
+        sd1 = pbn_biaaq_stats$biaaq_sum_change_sd,  
+        sd2 = control_biaaq_stats$biaaq_sum_change_sd,  
+        n1 = pbn_biaaq_stats$n,  
+        n2 = control_biaaq_stats$n,  
         a = 0.05) %>%
   pluck("estimate")
 
 ##Body-related mindfulness
-d.ind.t(m1 = pbn_chime_stats$chime_sum_change_mean, 
-        m2 = control_chime_stats$chime_sum_change_mean, 
-        sd1 = pbn_chime_stats$chime_sum_change_sd, 
-        sd2 = control_chime_stats$chime_sum_change_sd, 
-        n1 = pbn_chime_stats$n, 
-        n2 = control_chime_stats$n, 
+d.ind.t(m1 = pbn_chime_stats$chime_sum_change_mean,  
+        m2 = control_chime_stats$chime_sum_change_mean,  
+        sd1 = pbn_chime_stats$chime_sum_change_sd,  
+        sd2 = control_chime_stats$chime_sum_change_sd,  
+        n1 = pbn_chime_stats$n,  
+        n2 = control_chime_stats$n,  
         a = 0.05) %>%
   pluck("estimate")
 ```
 
 ```{r acceptability}
 #Check if there are differences in total PFS
-t.test(pbn_complete$pi_pfs_sum, control_complete$pi_pfs_sum)
+t.test(pbn_complete$pi_pfs_sum,  control_complete$pi_pfs_sum)
 #Significant differences in favor of PBN
 
 #Individual items for control participants
@@ -731,7 +807,7 @@ control_complete %>%
   select(pi_pfs_1:pi_pfs_7) %>%
   pivot_longer(everything()) %>%
   group_by(name) %>%
-  summarize(mean = mean(value),
+  summarize(mean = mean(value), 
             sd = sd(value))
 
 #Individual items for intervention participants
@@ -739,20 +815,20 @@ pbn_complete %>%
   select(pi_pfs_1:pi_pfs_7) %>%
   pivot_longer(everything()) %>%
   group_by(name) %>%
-  summarize(mean = mean(value),
+  summarize(mean = mean(value), 
             sd = sd(value))
 
-#N and percent of intervention participants with sum score >3 (selects Agree and Strongly Agree only), reflect overall perceived SSI acceptability
+#N and percent of intervention participants with sum score >3 (selects Agree and Strongly Agree only),  reflect overall perceived SSI acceptability
 participants_with_followup_pfs %>%
   filter(treatment_group == TRUE) %>%
-  mutate(pi_pfs_sum_scores = pi_pfs_sum / 7, 
+  mutate(pi_pfs_sum_scores = pi_pfs_sum / 7,  
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
   summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
 
-#N and percent of control participants with sum score >3 (selects Agree and Strongly Agree only), reflect overall perceived SSI acceptability
+#N and percent of control participants with sum score >3 (selects Agree and Strongly Agree only),  reflect overall perceived SSI acceptability
 participants_with_followup_pfs %>%
   filter(treatment_group == FALSE) %>%
-  mutate(pi_pfs_sum_scores = pi_pfs_sum / 7, 
+  mutate(pi_pfs_sum_scores = pi_pfs_sum / 7,  
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
   summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
 ```
@@ -772,7 +848,7 @@ participants_with_followup_complete_proximal %>%
 
 #Gender
 participants_with_followup_complete_proximal %>%
-  mutate(b_dem_gender = factor(b_dem_gender, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "14", "15", "16"))) %>%
+  mutate(b_dem_gender = factor(b_dem_gender,  levels = c("1",  "2",  "3",  "4",  "5",  "6",  "7",  "8",  "9",  "10",  "11",  "14",  "15",  "16"))) %>%
   count(b_dem_gender) %>%
   mutate(percent_of_sample = n / sum(n) * 100) %>%
   arrange(b_dem_gender)
@@ -786,9 +862,9 @@ count(b_dem_sexuality) %>%
 participants_with_followup_complete_proximal %>%
   select(starts_with("b_dem_race_ethnicity")) %>%
   select(-b_dem_race_ethnicity_7_TEXT) %>%
-  replace(is.na(.), 0) %>% #NAs are 0
-  mutate(across(starts_with("b_dem_race_ethnicity"), as.numeric)) %>%
-  pivot_longer(cols = starts_with("b_dem_race_ethnicity"), names_to = "column") %>%
-  count(column, value)  %>%
+  replace(is.na(.),  0) %>% #NAs are 0
+  mutate(across(starts_with("b_dem_race_ethnicity"),  as.numeric)) %>%
+  pivot_longer(cols = starts_with("b_dem_race_ethnicity"),  names_to = "column") %>%
+  count(column,  value)  %>%
   mutate(percent = n / sum(n) * 100)
 ```
