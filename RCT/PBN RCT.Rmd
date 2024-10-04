@@ -7,12 +7,12 @@ output:
   pdf_document: default
 ---
 
-```{r working directory}
-knitr::opts_knit$set(root.dir = "/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
-setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
+```{r working-directory}
+knitr::opts_knit$set(root.dir = "A:\\")
+setwd("A:\\")
 ```
 
-```{r load packages and data}
+```{r load-packages-and-data}
 #Load required packages
 if(!require(tidyverse)){install.packages('tidyverse')}
 library(tidyverse)
@@ -38,16 +38,23 @@ if(!require(readxl)){install.packages('readxl')}
 library(readxl)
 
 #Load data - #Using the .cols argument because otherwise some variables that should not be numeric are imported as such (e.g.,  demographics)
-original_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/original_baseline_survey_data.csv",  col_types = cols(.default = "c"))
-new_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/new_baseline_survey_data.csv",  col_types = cols(.default = "c"))
-followup_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/followup_survey_data.csv",  col_types = cols(.default = "c")) 
+original_baseline_survey_data <- read_survey("original_baseline_survey_data.csv",  col_types = cols(.default = "c"))
+new_baseline_survey_data <- read_survey("new_baseline_survey_data.csv",  col_types = cols(.default = "c"))
+followup_data <- read_survey("followup_survey_data.csv",  col_types = cols(.default = "c")) 
 participant_database <- read.csv(
-  "/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/participant_database.csv",
+  "participant_database.csv",
   stringsAsFactors = FALSE,
-  colClasses = "character")
+  colClasses = "character"
+) %>%
+  select(
+    Participant_ID = ï..Participant_ID,
+    Include.in.Analysis,
+    Compensation.Date,
+    Follow.Up.Completion
+  )
 ```
 
-```{r merge data}
+```{r merge-data}
 #Merge original_baseline_survey_data (closed because of frauds) and new_baseline_survey_data
 
 #original_baseline_survey_data has 731 columns but new_baseline_survey_data has 729. Figure out the 2 differences
@@ -63,11 +70,11 @@ merged_baseline_data <- bind_rows(original_baseline_survey_data,  new_baseline_s
 
 #Drop columns with no Participant IDs (they did not get far enough to get assigned an ID) 
 merged_baseline_data <- merged_baseline_data %>%
-  filter(!is.na(Participant_ID))
-
+  drop_na(Participant_ID)
+  
 #Now, we need to make sure that the participant database gets linked to the baseline data which it draws from
 merged_participant_database_baseline_data <- participant_database %>% 
-  left_join(merged_baseline_data, by = "Participant_ID")
+  left_join(merged_baseline_data, by = "Participant_ID", relationship = "one-to-one")
 
 #We also need to merge with the follow-up data, accounting for duplicates (people that submitted follow-ups multiple times)
 followup_data <- followup_data %>%
@@ -75,8 +82,10 @@ followup_data <- followup_data %>%
   arrange(desc(Progress),  RecordedDate) %>%
   slice(1)
 
+n_distinct(followup_data$Participant_ID) == nrow(followup_data)
+
 all_data <- merged_participant_database_baseline_data %>% 
-  left_join(followup_data,  by = "Participant_ID")
+  left_join(followup_data,  by = "Participant_ID", relationship = "one-to-one", suffix = c(".baseline", ".followup"))
 ```
 
 ```{r transform data}
@@ -105,34 +114,48 @@ transforming_race_ethnicity <- all_data %>%
   rename_with(~ str_c("b_dem_race_ethnicity_", .), -Participant_ID)
 
 all_data <- all_data %>%
-  left_join(transforming_gender, by = "Participant_ID") %>%
-  left_join(transforming_race_ethnicity, by = "Participant_ID") %>%
+  left_join(transforming_gender, by = "Participant_ID", relationship = "one-to-one") %>%
+  left_join(transforming_race_ethnicity, by = "Participant_ID", relationship = "one-to-one") %>%
   select(-b_dem_gender, -b_dem_race_ethnicity)
 
 #And I need to make all necessary variables numeric
 all_data <- all_data %>% mutate(across(c(pi_pfs_1:pi_pfs_7,  starts_with("b_dem_age"), starts_with("b_dem_saab"), starts_with("b_dem_sexuality"), starts_with("b_dem_sex"), starts_with("b_current"), starts_with("b_past"), starts_with("b_unmet"), starts_with("b_hunger"), starts_with("b_bhs"),  starts_with("b_shs_agency"), starts_with("b_biss"),  starts_with("b_fas"),  starts_with("b_biaaq"),   starts_with("b_chime"),  starts_with("b_mfq"),  starts_with("b_edeq"),  starts_with("b_mddi"),  starts_with("pi_bhs"),  starts_with("pi_shs_agency"),  starts_with("pi_biss"),  starts_with("pi_fas"),  starts_with("pi_biaaq"),  starts_with("pi_chime"),  starts_with("f_bhs"),  starts_with("f_shs_agency"),  starts_with("f_biss"),  starts_with("f_fas"),  starts_with("f_biaaq"), starts_with("f_chime"),  starts_with("f_mfq"),  starts_with("f_edeq"),  starts_with("f_mddi"), starts_with("f_new_support")),  
                 as.numeric))
 
-#Create a binary variable to identify the treatment group
-all_data <- all_data %>%
-  mutate(
-    treatment_group = factor(Condition.y == "Intervention", 
-                             levels = c(FALSE, TRUE), 
-                             labels = c("Control", "Intervention")))
-
 #Create a binary variable to identify if participants completed the intervention condition
 all_data <- all_data %>%
   mutate(
-    intervention_completed = factor("Intervention Completed" == "Intervention Completed", 
-                                    levels = c(TRUE, FALSE), 
-                                    labels = c("Completed", "Not Completed")))
+    
+    #Create a binary variable to identify the treatment group
+    treatment_group = factor(
+      Condition == "Intervention",
+      levels = c(FALSE, TRUE),
+      labels = c("Control", "Intervention")
+    ),
 
-#Create a binary variable to identify if participants completed the control condition
-all_data <- all_data %>%
-  mutate(
-    control_completed = factor("Control Completed" == "Control", 
-                               levels = c(TRUE, FALSE), 
-                               labels = c("Completed", "Not Completed")))
+    # Intervention completion
+    intervention_completed = case_when(
+      treatment_group == "Intervention" & `Intervention Completed` == "Intervention Completed" ~ TRUE,
+      treatment_group == "Intervention" & is.na(`Intervention Completed`) ~ FALSE,
+      treatment_group == "Control" ~ NA
+    ) %>%
+      factor(
+        levels = c(TRUE, FALSE),
+        labels = c("Completed", "Not Completed")
+      ),
+    
+    # Control completion
+    control_completed = case_when(
+      treatment_group == "Control" & `Control Completed` == "Control Completed" ~ TRUE,
+      treatment_group == "Control" & is.na(`Control Completed`) ~ FALSE,
+      treatment_group == "Intervention" ~ NA
+    ) %>%
+      factor(
+        levels = c(TRUE, FALSE),
+        labels = c("Completed", "Not Completed")
+      )
+    
+  )
 ```
 
 ```{r create sum scores}
@@ -159,13 +182,13 @@ all_data <- all_data %>%
          pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7, 
          b_mfq_sum = b_mfq_1 + b_mfq_2 + b_mfq_3 + b_mfq_4 + b_mfq_5 + b_mfq_6 + b_mfq_7 + b_mfq_8 + b_mfq_9 + b_mfq_10 + b_mfq_11 + b_mfq_12 + b_mfq_13,  
          f_mfq_sum = f_mfq_1 + f_mfq_2 + f_mfq_3 + f_mfq_4 + f_mfq_5 + f_mfq_6 + f_mfq_7 + f_mfq_8 + f_mfq_9 + f_mfq_10 + f_mfq_11 + f_mfq_12 + f_mfq_13, 
-        b_edeq_dietary_restraint = b_edeq_1 + b_edeq_2 + b_edeq_3,
-        b_edeq_body_dissatisfaction = b_edeq_4 + b_edeq_5 + b_edeq_6,
-        b_edeq_overvaluation = b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10,
+        b_edeq_dietary_restraint = (b_edeq_1 + b_edeq_2 + b_edeq_3) / 3,
+        b_edeq_body_dissatisfaction = (b_edeq_4 + b_edeq_5 + b_edeq_6) / 3,
+        b_edeq_overvaluation = (b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10) / 4,
         b_edeq_global = (b_edeq_dietary_restraint + b_edeq_body_dissatisfaction + b_edeq_overvaluation) / 3,
-        f_edeq_dietary_restraint = f_edeq_1 + f_edeq_2 + f_edeq_3,
-        f_edeq_body_dissatisfaction = f_edeq_4 + f_edeq_5 + f_edeq_6,
-        f_edeq_overvaluation = f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10,
+        f_edeq_dietary_restraint = (f_edeq_1 + f_edeq_2 + f_edeq_3) / 3,
+        f_edeq_body_dissatisfaction = (f_edeq_4 + f_edeq_5 + f_edeq_6) / 3,
+        f_edeq_overvaluation = (f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10) / 4,
         f_edeq_global = (f_edeq_dietary_restraint + f_edeq_body_dissatisfaction + f_edeq_overvaluation) / 3,
          b_mddi_sum = b_mddi_1 + b_mddi_2 + b_mddi_3 + b_mddi_4 + b_mddi_5 + b_mddi_6 + b_mddi_7 + b_mddi_8 + b_mddi_9 + b_mddi_10 + b_mddi_11 + b_mddi_12 + b_mddi_13, 
          f_mddi_sum = f_mddi_1 + f_mddi_2 + f_mddi_3 + f_mddi_4 + f_mddi_5 + f_mddi_6 + f_mddi_7 + f_mddi_8 + f_mddi_9 + f_mddi_10 + f_mddi_11 + f_mddi_12 + f_mddi_13) 
@@ -176,7 +199,7 @@ all_data <- all_data %>%
 #For each participant,  add a new column that calculates the percent missing of baseline primary outcome items
 all_data <- all_data %>%
   mutate(percent_missing = rowMeans(
-    is.na(select(all_data,  b_mfq_1,  b_mfq_2,  b_mfq_3,  b_mfq_4,  b_mfq_5,  b_mfq_6,  b_mfq_7,  b_mfq_8,  b_mfq_9,  b_mfq_10,  b_mfq_11,  b_mfq_12,  b_mfq_13,  b_edeq_1,  b_edeq_2,  b_edeq_3,  b_edeq_4,  b_edeq_5,  b_edeq_6,  b_edeq_7,  b_edeq_8,  b_edeq_9,  b_edeq_10)),  
+    is.na(select(.,  b_mfq_1,  b_mfq_2,  b_mfq_3,  b_mfq_4,  b_mfq_5,  b_mfq_6,  b_mfq_7,  b_mfq_8,  b_mfq_9,  b_mfq_10,  b_mfq_11,  b_mfq_12,  b_mfq_13,  b_edeq_1,  b_edeq_2,  b_edeq_3,  b_edeq_4,  b_edeq_5,  b_edeq_6,  b_edeq_7,  b_edeq_8,  b_edeq_9,  b_edeq_10)),
     na.rm = TRUE)) %>%
   mutate(percent_missing = percent_missing * 100)
 
@@ -199,19 +222,19 @@ nrow(completer_baseline)
 
 #Participants who submitted the baseline, were compensated, and passed data integrity checks - from the intervention group
 completer_baseline_intervention <- completer_baseline %>% 
-  filter(Condition.y == "Intervention")
+  filter(Condition == "Intervention")
 nrow(completer_baseline_intervention)
 #N=96
   
 #Participants who submitted the baseline, were compensated, and passed data integrity checks - from the control group
 completer_baseline_control <- completer_baseline %>% 
-  filter(Condition.y == "Control")
+  filter(Condition== "Control")
 nrow(completer_baseline_control)
 #N=95
 
 #Participants who got randomized and passed data integrity checks but did not get compensated (due to baseline incomplete)
 incomplete_baseline <- all_data %>% 
-  filter(Measures.Complete == "No" & Include.in.Analysis == "Yes")
+  filter(is.na(`Measures Completed.baseline`) & Include.in.Analysis == "Yes")
 nrow(incomplete_baseline)
 #N=27
 
@@ -222,27 +245,27 @@ nrow(randomized)
 
 #Participants who got randomized, passed data integrity checks, and completed their intervention
 completer_intervention <- all_data %>% 
-  filter(`Intervention Completed` == "Intervention Completed" | `Control Completed` == "Control Completed")  %>%
+  filter(Include.in.Analysis == "Yes", intervention_completed == "Completed" | control_completed == "Completed")  %>%
   semi_join(randomized,  by = "Participant_ID")
 nrow(completer_intervention)
 #N=204
 
 #Participants who got randomized, passed data integrity checks, and did not completed their intervention
 incomplete_intervention <- all_data %>%
-  filter((`Condition.y` == "Intervention" & (is.na(`Intervention Completed`) | `Intervention Completed` != "Intervention Completed")) | (`Condition.y` == "Control" & (is.na(`Control Completed`) | `Control Completed` != "Control Completed"))) %>%
+  filter((`Condition` == "Intervention" & (is.na(`Intervention Completed`) | `Intervention Completed` != "Intervention Completed")) | (`Condition` == "Control" & (is.na(`Control Completed`) | `Control Completed` != "Control Completed"))) %>%
   semi_join(randomized,  by = "Participant_ID")
 nrow(incomplete_intervention)
 #N=14
 
 #Intervention group participants who passed data integrity checks (regardless of completion)
 randomized_intervention <- randomized  %>%
-  filter(Condition.y == "Intervention")
+  filter(Condition == "Intervention")
 nrow(randomized_intervention)
 #N=103
 
 #Control group participants who passed data integrity checks (regardless of completion)
 randomized_control <- randomized  %>%
-  filter(Condition.y == "Control")
+  filter(Condition == "Control")
 nrow(randomized_control)
 #N=115
 
@@ -297,13 +320,13 @@ nrow(completer_followup)
 
 #Participants who completed the follow-up - from the intervention group
 completer_followup_intervention <- completer_followup %>% 
-  filter(Condition.y == "Intervention")
+  filter(Condition == "Intervention")
 nrow(completer_followup_intervention)
 #N=49
 
 #Participants who completed the follow-up - from the control group
 completer_followup_control <- completer_followup %>% 
-  filter(Condition.y == "Control")
+  filter(Condition == "Control")
 nrow(completer_followup_control)
 #N=58
 
@@ -328,10 +351,21 @@ nrow(incomplete_intervention_incomplete_followup)
 ```
 
 ```{r make seperate dataframes for quant data}
-#Dataframe for quantitative analysis (randomized)
-randomized_quant <- randomized %>%
+
+
+
+randomized_selected <- randomized %>%
    select(treatment_group,  intervention_completed,  starts_with(c("b_dem",  "b_current",  "b_past",  "b_unmet",  "b_hunger",  "b_bhs",  "b_shs_agency",  "b_biss",  "b_fas",  "b_biaaq",  "b_chime",  "b_mfq",  "b_edeq",  "b_mddi",  "pi_pfs",  "pi_bhs",  "pi_shs_agency",  "pi_biss",  "pi_fas",  "pi_biaaq",  "pi_chime",  "f_new",  "f_bhs",  "f_shs_agency",  "f_biss",  "f_fas",  "f_biaaq",  "f_chime",  "f_mfq",  "f_edeq",  "f_mddi"))) %>%
   select(-contains("free"),  -contains("TEXT"),  -contains("_tim_"),  -contains("pfs_like"),  -contains("pfs_change"),  -contains("pfs_other"), -contains("percent_missing")) 
+# More variables: completed baseline, completed followup
+
+# Now impute
+
+randomized_selected %>%
+  filter(completed_followup)
+
+#Dataframe for quantitative analysis (randomized)
+
 
 #Dataframe for quantitative analysis (completer_intervention)
 completer_intervention_quant <- completer_intervention %>%
