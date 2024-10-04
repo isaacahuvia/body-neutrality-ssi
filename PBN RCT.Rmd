@@ -109,12 +109,8 @@ all_data <- all_data %>%
   left_join(transforming_race_ethnicity, by = "Participant_ID") %>%
   select(-b_dem_gender, -b_dem_race_ethnicity)
 
-#Now I need to make all other appropriate variables into factors
-all_data <- all_data %>% 
-  mutate(across(.cols = c(b_dem_saab, b_dem_sexuality, b_dem_sex, b_current_mood, b_past_px, b_past_mood, b_unmet_mood_now, b_unmet_mood_past, b_current_ed, b_past_ed, b_unmet_ed_now, b_unmet_ed_past, b_hunger_1, b_hunger_2, f_new_support_mood, f_new_support_ed), as.factor))
-
 #And I need to make all necessary variables numeric
-all_data <- all_data %>% mutate(across(c(pi_pfs_1:pi_pfs_7,  starts_with("b_dem_age"),  starts_with("b_bhs"),  starts_with("b_shs_agency"), starts_with("b_biss"),  starts_with("b_fas"),  starts_with("b_biaaq"),   starts_with("b_chime"),  starts_with("b_mfq"),  starts_with("b_edeq"),  starts_with("b_mddi"),  starts_with("pi_bhs"),  starts_with("pi_shs_agency"),  starts_with("pi_biss"),  starts_with("pi_fas"),  starts_with("pi_biaaq"),  starts_with("pi_chime"),  starts_with("f_bhs"),  starts_with("f_shs_agency"),  starts_with("f_biss"),  starts_with("f_fas"),  starts_with("f_biaaq"), starts_with("f_chime"),  starts_with("f_mfq"),  starts_with("f_edeq"),  starts_with("f_mddi")),  
+all_data <- all_data %>% mutate(across(c(pi_pfs_1:pi_pfs_7,  starts_with("b_dem_age"), starts_with("b_dem_saab"), starts_with("b_dem_sexuality"), starts_with("b_dem_sex"), starts_with("b_current"), starts_with("b_past"), starts_with("b_unmet"), starts_with("b_hunger"), starts_with("b_bhs"),  starts_with("b_shs_agency"), starts_with("b_biss"),  starts_with("b_fas"),  starts_with("b_biaaq"),   starts_with("b_chime"),  starts_with("b_mfq"),  starts_with("b_edeq"),  starts_with("b_mddi"),  starts_with("pi_bhs"),  starts_with("pi_shs_agency"),  starts_with("pi_biss"),  starts_with("pi_fas"),  starts_with("pi_biaaq"),  starts_with("pi_chime"),  starts_with("f_bhs"),  starts_with("f_shs_agency"),  starts_with("f_biss"),  starts_with("f_fas"),  starts_with("f_biaaq"), starts_with("f_chime"),  starts_with("f_mfq"),  starts_with("f_edeq"),  starts_with("f_mddi"), starts_with("f_new_support")),  
                 as.numeric))
 
 #Create a binary variable to identify the treatment group
@@ -163,8 +159,14 @@ all_data <- all_data %>%
          pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7, 
          b_mfq_sum = b_mfq_1 + b_mfq_2 + b_mfq_3 + b_mfq_4 + b_mfq_5 + b_mfq_6 + b_mfq_7 + b_mfq_8 + b_mfq_9 + b_mfq_10 + b_mfq_11 + b_mfq_12 + b_mfq_13,  
          f_mfq_sum = f_mfq_1 + f_mfq_2 + f_mfq_3 + f_mfq_4 + f_mfq_5 + f_mfq_6 + f_mfq_7 + f_mfq_8 + f_mfq_9 + f_mfq_10 + f_mfq_11 + f_mfq_12 + f_mfq_13, 
-         b_edeq_sum = b_edeq_1 + b_edeq_2 + b_edeq_3 + b_edeq_4 + b_edeq_5 + b_edeq_6 + b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10, 
-         f_edeq_sum = f_edeq_1 + f_edeq_2 + f_edeq_3 + f_edeq_4 + f_edeq_5 + f_edeq_6 + f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10,  
+        b_edeq_dietary_restraint = b_edeq_1 + b_edeq_2 + b_edeq_3,
+        b_edeq_body_dissatisfaction = b_edeq_4 + b_edeq_5 + b_edeq_6,
+        b_edeq_overvaluation = b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10,
+        b_edeq_global = (b_edeq_dietary_restraint + b_edeq_body_dissatisfaction + b_edeq_overvaluation) / 3,
+        f_edeq_dietary_restraint = f_edeq_1 + f_edeq_2 + f_edeq_3,
+        f_edeq_body_dissatisfaction = f_edeq_4 + f_edeq_5 + f_edeq_6,
+        f_edeq_overvaluation = f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10,
+        f_edeq_global = (f_edeq_dietary_restraint + f_edeq_body_dissatisfaction + f_edeq_overvaluation) / 3,
          b_mddi_sum = b_mddi_1 + b_mddi_2 + b_mddi_3 + b_mddi_4 + b_mddi_5 + b_mddi_6 + b_mddi_7 + b_mddi_8 + b_mddi_9 + b_mddi_10 + b_mddi_11 + b_mddi_12 + b_mddi_13, 
          f_mddi_sum = f_mddi_1 + f_mddi_2 + f_mddi_3 + f_mddi_4 + f_mddi_5 + f_mddi_6 + f_mddi_7 + f_mddi_8 + f_mddi_9 + f_mddi_10 + f_mddi_11 + f_mddi_12 + f_mddi_13) 
 ```
@@ -316,6 +318,7 @@ incomplete_intervention_completer_followup <- incomplete_intervention %>%
   semi_join(completer_followup %>% select(Participant_ID), by = "Participant_ID")
 nrow(incomplete_intervention_completer_followup)
 #N=1
+####HOW WOULD THIS HAVE CHANGED FROM 1 TO 0 WITH THE CHANGES I MADE ON THIS BRANCH?####
 
 #Participants who were randomized but did not complete their intervention who did not complete their follow-up
 incomplete_intervention_incomplete_followup <- incomplete_intervention %>%
@@ -348,36 +351,42 @@ completer_followup_quant <- completer_followup %>%
 
 ```{r extract data for qual analysis}
 #Dataframe for qualitative analysis (intervention completers with PFS data)
-qual_data <- randomized_intervention_pfs_complete %>%
+qual_data_intervention <- randomized_intervention_pfs_complete %>%
+ select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)
+
+#Dataframe for qualitative analysis (control completers with PFS data)
+qual_data_control <- randomized_control_pfs_complete %>%
  select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)
 
 #Table export (only run again if file gets deleted)
-#flextable::flextable(qual_data,  cwidth = c(0.5, 7, 0.5))
+#flextable::flextable(qual_data_intervention,  cwidth = c(0.5, 7, 0.5))
 #write.xlsx(qual_data,  "pfs_qual_intervention.xlsx")
+#flextable::flextable(qual_data_control,  cwidth = c(0.5, 7, 0.5))
+#write.xlsx(qual_data_control,  "pfs_qual_control.xlsx")
 ```
 
 ```{r imputation}
-#set.seed(12345) #use the same seed number each time to make the code reproducible (the seed number is just the starting point used in the generation of a sequence of random numbers in the random forest)
+set.seed(12345) #use the same seed number each time to make the code reproducible (the seed number is just the starting point used in the generation of a sequence of random numbers in the random forest)
 
 #For randomized
 #imputed_randomized_quant <- missForest(randomized_quant)
 #imputed_randomized_quant_error <- as.data.frame(imputed_randomized_quant$OOBerror)
 #imputed_randomized_quant <- as.data.frame(imputed_randomized_quant$ximp)
-#randomized_quant <- round(randomized_quant) #Since the algorithm introduces decimals which is not appropriate for this data,  round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this. 
+#imputed_randomized_quant <- round(imputed_randomized_quant) #Since the algorithm introduces decimals which is not appropriate for this data,  round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this. It currently doesn't run with rounding
 #write.csv(imputed_randomized_quant,file='imputed_randomized_quant.csv')
 
 #For completer_intervention
 #imputed_completer_intervention_quant <- missForest(completer_intervention_quant)
 #imputed_completer_intervention_quant_error <- as.data.frame(imputed_completer_intervention_quant$OOBerror)
 #imputed_completer_intervention_quant <- as.data.frame(imputed_completer_intervention_quant$ximp)
-#completer_intervention_quant <- round(completer_intervention_quant) #Since the algorithm introduces decimals which is not appropriate for this data,  round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this. 
+#imputed_completer_intervention_quant <- round(imputed_completer_intervention_quant) #Since the algorithm introduces decimals which is not appropriate for this data,  round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this. It may actually make sense to include decimals - discuss this. It currently doesn't run with rounding
 #write.csv(imputed_completer_intervention_quant,file='imputed_completer_intervention_quant.csv')
 
 #For completer_baseline
 #imputed_completer_baseline_quant <- missForest(completer_baseline_quant)
 #imputed_completer_baseline_quant_error <- as.data.frame(imputed_completer_baseline_quant$OOBerror)
 #imputed_completer_baseline_quant <- as.data.frame(imputed_completer_baseline_quant$ximp)
-#completer_baseline_quant <- round(completer_baseline_quant) #Since the algorithm introduces decimals which is not appropriate for this data,  round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this. 
+#imputed_completer_baseline_quant <- round(imputed_completer_baseline_quant) #Since the algorithm introduces decimals which is not appropriate for this data,  round to the nearest whole number. UPDATE FROM ISAAC: It may actually make sense to include decimals - discuss this. It may actually make sense to include decimals - discuss this. It currently doesn't run with rounding
 #write.csv(imputed_completer_baseline_quant,file='imputed_completer_baseline_quant.csv')
 ```
 
@@ -475,10 +484,10 @@ coefci(lm_mfq_itt,  vcov = sandwich)
 #No significant effect of treatment_group (p>0.05)
 
 #Eating disorder symptoms pre-followup
-lm_edeq_itt <- lm(f_edeq_sum ~ b_edeq_sum + treatment_group,  data = imputed_randomized_quant)
+lm_edeq_itt <- lm(f_edeq_global ~ b_edeq_global + treatment_group,  data = imputed_randomized_quant)
 summary(lm_edeq_itt)
 coefci(lm_edeq_itt,  vcov = sandwich)
-#Significant effect of treatment_group (p<0.05) in the expected direction (negative)
+#No significant effect of treatment_group (p>0.05)
 
 #Muscle dysmorphia symptoms pre-followup - EXPLORATORY
 lm_mddi_itt <- lm(f_mddi_sum ~ b_mddi_sum + treatment_group,  data = imputed_randomized_quant)
@@ -4545,4 +4554,83 @@ randomized_control_pfs_complete %>%
   mutate(pi_pfs_sum_scores = pi_pfs_sum / 7,  
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
   summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
+```
+
+```{r demographics - ITT non-imputed}
+# Sex assigned at birth
+randomized_quant %>%
+  count(b_dem_sex) %>%
+  mutate(percent = (n / sum(n))*100)
+
+#Sexual orientation
+randomized_quant %>%
+  count(b_dem_sexuality) %>%
+  mutate(percent = (n / sum(n))*100)
+
+#Age
+randomized_quant %>% 
+  count(b_dem_age) %>% 
+  mutate(percent = (n / sum(n))*100)
+
+#Gender
+#randomized_quant %>%
+#  select(starts_with("b_dem_gender")) %>%
+#  summarize(across(everything(), #The line defines a function where x represents a column. List is used because there are two functions (n and %).
+#                   list(n = function(x) sum(x == 1), #Counts occurrences of 1 within the column x
+#                        percent = function(x) mean(x == 1) * 100))) #Calculates the percentages of 1s in the column x by calculating the proportion where the value of x is 1, and multiplying it by 100
+#The concise, tidyverse version of the above would be:
+randomized_quant %>%
+  select(starts_with("b_dem_gender")) %>% 
+  summarize(across(everything(), 
+                   list(n = ~ sum(. == 1),
+                        percent = ~ mean(. == 1) * 100)))
+
+#Race and ethnicity
+randomized_quant %>% 
+  select(starts_with("b_dem_race")) %>% 
+  summarize(across(everything(),
+                   list(n = ~ sum(.x == 1),
+                        percent = ~ mean(. == 1))))
+
+#We could not get the disability items approved by the IRB in time
+
+#Food insecurity
+randomized_quant %>%
+  mutate(b_food_insecure = if_else(b_hunger_1 >= 2 | b_hunger_2 >= 2, 1, 0)) %>% 
+  count(b_food_insecure) %>% 
+  mutate(percent = (n / sum(n))*100)
+
+#Access to care
+#b_past_x is only displayed if b_current_x is marked "No"
+#b_unmet_x_past is only displayed if b_unmet_x_now is marked "No"
+
+##Depression and mood problems
+randomized_quant %>% 
+  select(b_current_mood, b_past_mood, b_unmet_mood_now, b_unmet_mood_past) %>% 
+  summarize(across(everything(),
+                   list(n = ~ sum(.x == 1, na.rm = TRUE),
+                        percent = ~ mean(. == 1, na.rm = TRUE) * 100)))
+
+##Eating disorder and body image concerns
+randomized_quant %>% 
+  select(b_current_ed, b_past_ed, b_unmet_ed_now, b_unmet_ed_past) %>% 
+  summarize(across(everything(),
+                   list(n = ~ sum(.x == 1, na.rm = TRUE),
+                        percent = ~ mean(. == 1, na.rm = TRUE) * 100)))
+
+#Depression symptoms at baseline
+randomized_quant %>% 
+  summarize(mean = mean(b_mfq_sum, na.rm = TRUE), 
+            sd = sd(b_mfq_sum, na.rm = TRUE))
+
+#Eating disorder symptoms at baseline
+randomized_quant %>% 
+  mutate(b_edeq_dietary_restraint = b_edeq_1 + b_edeq_2 + b_edeq_3,
+         b_edeq_body_dissatisfaction = b_edeq_4 + b_edeq_5 + b_edeq_6,
+         b_edeq_overvaluation = b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10) %>% 
+  select(b_edeq_dietary_restraint, b_edeq_body_dissatisfaction, b_edeq_overvaluation) %>% 
+   summarize(across(everything(),  
+                    list(mean = mean,  sd = sd))) 
+
+#I think I messed up these analyses and need to use global EDE-Q scores (which is an average of the three subscales) throughout rather than the sum of all items
 ```
