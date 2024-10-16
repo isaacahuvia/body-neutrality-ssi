@@ -157,7 +157,23 @@ all_data <- all_data %>%
         f_edeq_overvaluation = (f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10) / 4,
         f_edeq_global = (f_edeq_dietary_restraint + f_edeq_body_dissatisfaction + f_edeq_overvaluation) / 3,
          b_mddi_sum = b_mddi_1 + b_mddi_2 + b_mddi_3 + b_mddi_4 + b_mddi_5 + b_mddi_6 + b_mddi_7 + b_mddi_8 + b_mddi_9 + b_mddi_10 + b_mddi_11 + b_mddi_12 + b_mddi_13, 
-         f_mddi_sum = f_mddi_1 + f_mddi_2 + f_mddi_3 + f_mddi_4 + f_mddi_5 + f_mddi_6 + f_mddi_7 + f_mddi_8 + f_mddi_9 + f_mddi_10 + f_mddi_11 + f_mddi_12 + f_mddi_13) 
+         f_mddi_sum = f_mddi_1 + f_mddi_2 + f_mddi_3 + f_mddi_4 + f_mddi_5 + f_mddi_6 + f_mddi_7 + f_mddi_8 + f_mddi_9 + f_mddi_10 + f_mddi_11 + f_mddi_12 + f_mddi_13)
+         #b_edeq_sum = b_edeq_1 + b_edeq_2 + b_edeq_3 + b_edeq_4 + b_edeq_5 + b_edeq_6 + b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10, #for testing only 
+         #f_edeq_sum = f_edeq_1 + f_edeq_2 + f_edeq_3 + f_edeq_4 + f_edeq_5 + f_edeq_6 + f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10) #for testing only 
+```
+
+
+```{r comparing-edeq-scoring}
+#Originally, I used EDE-Q global sum scores instead of means. This could explain differences in EDE-Q results between rct-7 and this branch, if the correlation between the sums and means is not 1. 
+
+#Sum like I› did earlier
+test <- all_data %>% 
+   mutate(b_edeq_sum = b_edeq_1 + b_edeq_2 + b_edeq_3 + b_edeq_4 + b_edeq_5 + b_edeq_6 + b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10, 
+         f_edeq_sum = f_edeq_1 + f_edeq_2 + f_edeq_3 + f_edeq_4 + f_edeq_5 + f_edeq_6 + f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10)
+
+cor(test$b_edeq_sum, test$b_edeq_global, use = "complete.obs")
+cor(test$f_edeq_sum, test$f_edeq_global, use = "complete.obs")
+#Even with NAs excluded, there is a slight difference between the simple sum score and the global EDE-Q mean, I think because of the different weighting for the EDE-Q overvaluation subscale
 ```
 
 ```{r prepare-randomized-sample}
@@ -258,6 +274,32 @@ set.seed(12345) #use the same seed number each time to make the code reproducibl
 #imputed_data <- bind_cols(Participant_ID = participant_ids, imputed_data) #add back participant IDs
 #imputed_data <- round(imputed_data) #TBD if we should round, it currently doesn't run with rounding
 #write.csv(imputed_data,file='imputed_data.csv')
+```
+
+```{r modifying-imputation-tests}
+#In rct-7, even though I broke the data into seperate dataframes for each analysis before imputation (which is not correct), the imputation I had done for the ITT dataframe would be same as what is done here, because here, the ITT dataframe is the basis for all of the imputation. See if the original ITT imputation model I used (without some of the extra predictors that were not pre-registered, makes a difference with my EDE-Q outcome)
+
+#imputation_ready_test <- missingness_handled %>%
+#    select(treatment_group, completer_intervention_assignment, #called intervention_completed in rct-7
+#           starts_with(c("b_dem",  "b_current",  "b_past",  "b_unmet",  "b_hunger",  "b_bhs",  "b_shs_agency",  "b_biss",  "b_fas",  "b_biaaq",  "b_chime",  "b_mfq",  "b_edeq",  "b_mddi",  "pi_pfs",  "pi_bhs",  "pi_shs_agency",  "pi_biss",  "pi_fas",  "pi_biaaq",  "pi_chime",  "f_new",  "f_bhs",  "f_shs_agency",  "f_biss",  "f_fas",  "f_biaaq",  "f_chime",  "f_mfq",  "f_edeq",  "f_mddi"))) %>%
+ # select(-contains("free"),  -contains("TEXT"),  -contains("_tim_"),  -contains("pfs_like"),  -contains("pfs_change"),  -contains("pfs_other"), -contains("percent_missing")) 
+
+#set.seed(12345) #use the same seed number each time to make the code reproducible (the seed number is just the starting point used in the generation of a sequence of random numbers in the random forest)
+
+#imputed_data_test <- missForest(imputation_ready_test)
+#imputed_data_test <- as.data.frame(imputed_data_test$ximp)
+
+#NOTE Requires swapping sum for mean scores in the create-sum-scores chunk
+#lm_edeq_itt_test_1 <- lm(f_edeq_global ~ b_edeq_global + treatment_group,  data = imputed_data_test)
+#summary(lm_edeq_itt_test_1)
+#coefci(lm_edeq_itt_test_1,  vcov = sandwich)
+#p value is larger (0.099)
+
+#See if I can reproduce the original EDE-Q p-value I got using sum scores (with the original imputation method) to see if the change to means is what is at the bottom of the issue. NOTE Requires swapping means for sum scores in the create-sum-scores chunk
+#lm_edeq_itt_test_2 <- lm(f_edeq_sum ~ b_edeq_sum + treatment_group,  data = imputed_data_test)
+#summary(lm_edeq_itt_test_2)
+#coefci(lm_edeq_itt_test_2,  vcov = sandwich)
+#p value is 0.0537 which isn't exactly what I had before but is close. These small changes really do make a difference.
 ```
 
 ```{r load-imputed-data}
