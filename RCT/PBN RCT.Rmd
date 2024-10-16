@@ -8,8 +8,8 @@ output:
 ---
 
 ```{r working-directory}
-knitr::opts_knit$set(root.dir = "/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
-setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
+# knitr::opts_knit$set(root.dir = "/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
+setwd("A:\\")
 ```
 
 ```{r load-packages-and-data}
@@ -38,16 +38,16 @@ if(!require(readxl)){install.packages('readxl')}
 library(readxl)
 
 #Load data - #Using the .cols argument because otherwise some variables that should not be numeric are imported as such (e.g.,  demographics)
-original_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/original_baseline_survey_data.csv",  col_types = cols(.default = "c"))
-new_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/new_baseline_survey_data.csv",  col_types = cols(.default = "c"))
-followup_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/followup_survey_data.csv",  col_types = cols(.default = "c")) 
+original_baseline_survey_data <- read_survey("original_baseline_survey_data.csv",  col_types = cols(.default = "c"))
+new_baseline_survey_data <- read_survey("new_baseline_survey_data.csv",  col_types = cols(.default = "c"))
+followup_data <- read_survey("followup_survey_data.csv",  col_types = cols(.default = "c")) 
 participant_database <- read.csv(
-  "/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/participant_database.csv",
+  "participant_database.csv",
   stringsAsFactors = FALSE,
   colClasses = "character"
 ) %>%
   select(
-    Participant_ID,
+    Participant_ID = ï..Participant_ID,
     Include.in.Analysis,
     Compensation.Date,
     Follow.Up.Completion
@@ -261,19 +261,19 @@ imputation_ready_with_IDs <- missingness_handled %>%
 participant_ids <- imputation_ready_with_IDs$Participant_ID
 
 #Drop participant IDs for imputation
- imputation_ready_no_IDs <- imputation_ready_with_IDs %>% 
+imputation_ready_no_IDs <- imputation_ready_with_IDs %>% 
   select(-Participant_ID)
 ```
 
 ```{r imputation}
 set.seed(12345) #use the same seed number each time to make the code reproducible (the seed number is just the starting point used in the generation of a sequence of random numbers in the random forest)
 
-#imputed_data <- missForest(imputation_ready_no_IDs)
-#imputed_data_error <- imputed_data$OOBerror
-#imputed_data <- as.data.frame(imputed_data$ximp)
-#imputed_data <- bind_cols(Participant_ID = participant_ids, imputed_data) #add back participant IDs
-#imputed_data <- round(imputed_data) #TBD if we should round, it currently doesn't run with rounding
-#write.csv(imputed_data,file='imputed_data.csv')
+missForest_output <- missForest(imputation_ready_no_IDs)
+imputed_data_error <- missForest_output$OOBerror
+imputed_data <- as.data.frame(missForest_output$ximp)
+imputed_data <- bind_cols(Participant_ID = participant_ids, imputed_data) #add back participant IDs
+# imputed_data <- round(imputed_data) #TBD if we should round, it currently doesn't run with rounding
+write.csv(imputed_data,file='imputed_data.csv')
 ```
 
 ```{r modifying-imputation-tests}
@@ -353,10 +353,24 @@ print(descriptives)
 
 ```{r primary-analysis-1-ITT}
 #Hopelessness pre-post
-lm_bhs_itt_1 <- lm(pi_bhs_sum ~ b_bhs_sum + treatment_group,  data = df_randomized_imputed)
-summary(lm_bhs_itt_1)
-coefci(lm_bhs_itt_1, vcov = sandwich)
-p_value_bhs_itt_1 <- summary(lm_bhs_itt_1)$coefficients[3,4]
+library(broom)
+
+lm_bhs_itt_1 <- lm(pi_bhs_sum ~ b_bhs_sum + treatment_group,  data = df_randomized_imputed) 
+tidy(lm_bhs_itt_1, conf.int = T)
+
+library(lmtest)
+library(sandwich)
+lm_bhs_itt_1_robust <- coeftest(
+  x = lm_bhs_itt_1,
+  vcov = vcovHC(lm_bhs_itt_1, type = "HC0")
+)
+
+tidy(lm_bhs_itt_1_robust, conf.int = T)
+
+p_value_bhs_itt_1 <- lm_bhs_itt_1 %>%
+  tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(p.value)
 
 #Hopelessness pre-followup
 lm_bhs_itt_2 <- lm(f_bhs_sum ~ b_bhs_sum + treatment_group,  data = df_randomized_imputed)
@@ -548,7 +562,7 @@ sqrt(vif(lm_biaaq_itt_1))
 sqrt(vif(lm_chime_itt_1))
 
 ##Linearity of data
-plot(lm_bhs_itt_1,  1)
+plot(lm_bhs_itt_1, 1)
 plot(lm_shs_agency_itt_1,  1)
 plot(lm_biss_itt_1,  1)
 plot(lm_fas_itt_1,  1)
@@ -638,6 +652,8 @@ bptest(lm_biaaq_itt_2)
 bptest(lm_chime_itt_2)
 
 ##Normality of residual errors
+hist(resid(lm_bhs_itt_2))
+
 ols_plot_resid_qq(lm_bhs_itt_2)
 ols_plot_resid_qq(lm_shs_agency_itt_2) 
 ols_plot_resid_qq(lm_biss_itt_2)
@@ -2888,3 +2904,39 @@ ssi_progress_randomized_incomplete_control %>%
   select(Participant_ID, ssi_pages_completed, ssi_percent_completed)
 ```
 
+```{r}
+p.values <- runif(n = 100)
+p.adjust(
+  p = p.values,
+  method = "BH"
+)
+
+hist(df_randomized_imputed$b_edeq_global)
+
+lm(data = df_randomized_imputed, formula = f_edeq_global ~ b_edeq_global * treatment_group) %>% 
+  summary()
+
+df_randomized_imputed %>%
+  mutate(
+    edeq_threshold = b_edeq_global >= 2.3
+  ) %>%
+  group_by(treatment_group, edeq_threshold) %>%
+  summarize(
+    b_edeq_mean = mean(b_edeq_global),
+    f_edeq_mean = mean(f_edeq_global),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(b_edeq_mean, f_edeq_mean)
+  ) %>%
+  ggplot() +
+  geom_point(
+    aes(
+      x = name,
+      y = value,
+      color = treatment_group,
+      linetype = edeq_threshold
+    )
+  ) + 
+  theme_classic()
+```
