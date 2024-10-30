@@ -1,0 +1,259 @@
+
+```{r working-directory}
+knitr::opts_knit$set(root.dir = "/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
+setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
+```
+
+```{r load-packages-and-data}
+#Load required packages
+if(!require(tidyverse)){install.packages('tidyverse')}
+library(tidyverse)
+if(!require(lmtest)){install.packages('lmtest')}
+library(lmtest)
+if(!require(car)){install.packages('car')}
+library(car)
+if(!require(olsrr)){install.packages('olsrr')}
+library(olsrr)
+if(!require(sandwich)){install.packages('sandwich')}
+library(sandwich)
+if(!require(MOTE)){install.packages('MOTE')}
+library(MOTE)
+if(!require(openxlsx)){install.packages('openxlsx')}
+library(openxlsx)
+if(!require(missForest)){install.packages('missForest')}
+library(missForest)
+if(!require(visdat)){install.packages('visdat')}
+library(visdat)
+if(!require(qualtRics)){install.packages('qualtRics')}
+library(qualtRics)
+if(!require(readxl)){install.packages('readxl')}
+library(readxl)
+if(!require(broom)){install.packages('broom')}
+library(broom)
+
+#Load data - #Using the .cols argument because otherwise some variables that should not be numeric are imported as such (e.g.,  demographics)
+original_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/original_baseline_survey_data.csv",  col_types = cols(.default = "c"))
+new_baseline_survey_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/new_baseline_survey_data.csv",  col_types = cols(.default = "c"))
+followup_data <- read_survey("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/followup_survey_data.csv",  col_types = cols(.default = "c")) 
+participant_database <- read.csv(
+  "/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)/participant_database.csv",
+  stringsAsFactors = FALSE,
+  colClasses = "character"
+) %>%
+  select(
+    Participant_ID,
+    Include.in.Analysis,
+    Compensation.Date,
+    Follow.Up.Completion
+  )
+```
+
+```{r merge-data}
+#Merge original_baseline_survey_data (closed because of frauds) and new_baseline_survey_data
+
+#original_baseline_survey_data has 731 columns but new_baseline_survey_data has 729. Figure out the 2 differences
+cols_in_original_only <- setdiff(names(original_baseline_survey_data),  names(new_baseline_survey_data))
+print(cols_in_original_only)
+
+#Remove the 2 extra Qualtrics columns from original_baseline_survey_data (won't mess things up because they are at the end and don't have anything important)
+original_baseline_survey_data <- original_baseline_survey_data %>%
+  select(-Q_AmbiguousTextPresent,  -Q_AmbiguousTextQuestions)
+
+#Now we can merge
+merged_baseline_data <- bind_rows(original_baseline_survey_data,  new_baseline_survey_data)
+
+#Drop columns with no Participant IDs (they did not get far enough to get assigned an ID) 
+merged_baseline_data <- merged_baseline_data %>%
+  drop_na(Participant_ID)
+  
+#Now, we need to make sure that the participant database gets linked to the baseline data which it draws from
+merged_participant_database_baseline_data <- participant_database %>% 
+  left_join(merged_baseline_data, by = "Participant_ID", relationship = "one-to-one")
+
+#We also need to merge with the follow-up data, accounting for duplicates (people that submitted follow-ups multiple times)
+followup_data <- followup_data %>%
+  group_by(Participant_ID) %>%
+  arrange(desc(Progress),  RecordedDate) %>%
+  slice(1)
+
+n_distinct(followup_data$Participant_ID) == nrow(followup_data)
+
+all_data <- merged_participant_database_baseline_data %>% 
+  left_join(followup_data,  by = "Participant_ID", relationship = "one-to-one", suffix = c(".baseline", ".followup"))
+```
+
+```{r transform-data}
+#The gender and race/ethnicity items include all responses from the multiple-select questions in one column. I need to separate them out in order to make them factors.
+
+#First focus on transforming gender
+transforming_gender <- all_data %>% 
+  select(b_dem_gender, Participant_ID) %>%
+  separate_rows(b_dem_gender, sep = ",") %>%
+  pivot_wider(
+    names_from = b_dem_gender,
+    values_from = b_dem_gender,
+    values_fill = list(b_dem_gender = "0")) %>%
+  mutate(across(-Participant_ID, ~ as.factor(as.numeric(. != "0")))) %>% 
+  rename_with(~ str_c("b_dem_gender_", .), -Participant_ID)
+
+#Now focus on transforming race/ethnicity
+transforming_race_ethnicity <- all_data %>% 
+  select(b_dem_race_ethnicity, Participant_ID) %>%
+  separate_rows(b_dem_race_ethnicity, sep = ",") %>%
+  pivot_wider(
+    names_from = b_dem_race_ethnicity,
+    values_from = b_dem_race_ethnicity,
+    values_fill = list(b_dem_race_ethnicity = "0")) %>%
+  mutate(across(-Participant_ID, ~ as.factor(as.numeric(. != "0")))) %>% 
+  rename_with(~ str_c("b_dem_race_ethnicity_", .), -Participant_ID)
+
+all_data <- all_data %>%
+  left_join(transforming_gender, by = "Participant_ID", relationship = "one-to-one") %>%
+  left_join(transforming_race_ethnicity, by = "Participant_ID", relationship = "one-to-one")
+
+#Make all other necessary variables factors
+all_data <- all_data %>% 
+  mutate(across(c(starts_with("b_dem_saab"), starts_with("b_dem_sexuality"), starts_with("b_dem_sex"), starts_with("b_current"), starts_with("b_past"), starts_with("b_unmet"), starts_with("b_hunger"), starts_with("f_new_support")),
+                as.factor))
+
+#And I need to make all necessary variables numeric
+all_data <- all_data %>%
+  select(-contains("text"), -contains("free"), -b_dem_gender, -b_dem_race_ethnicity) %>% #remove free text and old demographic variables
+  mutate(across(c(pi_pfs_1:pi_pfs_7,  starts_with("b_dem_age"), starts_with("b_bhs"),  starts_with("b_shs_agency"), starts_with("b_biss"),  starts_with("b_fas"),  starts_with("b_biaaq"),   starts_with("b_chime"),  starts_with("b_mfq"),  starts_with("b_edeq"),  starts_with("b_mddi"),  starts_with("pi_bhs"),  starts_with("pi_shs_agency"),  starts_with("pi_biss"),  starts_with("pi_fas"),  starts_with("pi_biaaq"),  starts_with("pi_chime"),  starts_with("f_bhs"),  starts_with("f_shs_agency"),  starts_with("f_biss"),  starts_with("f_fas"),  starts_with("f_biaaq"), starts_with("f_chime"),  starts_with("f_mfq"),  starts_with("f_edeq"),  starts_with("f_mddi")),  
+                as.numeric))
+```
+
+```{r create-sum-scores}
+#All relevant items are already reverse-scored in Qualtrics
+all_data <- all_data %>%
+  mutate(b_bhs_sum = b_bhs_1 + b_bhs_2 + b_bhs_3 + b_bhs_4, 
+         pi_bhs_sum = pi_bhs_1 + pi_bhs_2 + pi_bhs_3 + pi_bhs_4, 
+         f_bhs_sum = f_bhs_1 + f_bhs_2 + f_bhs_3 + f_bhs_4, 
+         b_shs_agency_sum = b_shs_agency_1 + b_shs_agency_2 + b_shs_agency_3, 
+         pi_shs_agency_sum = pi_shs_agency_1 + pi_shs_agency_2 + pi_shs_agency_3, 
+         f_shs_agency_sum = f_shs_agency_1 + f_shs_agency_2 + f_shs_agency_3, 
+         b_biss_sum = b_biss_1 + b_biss_2 + b_biss_3 + b_biss_4 +  b_biss_5 + b_biss_6, 
+         pi_biss_sum = pi_biss_1 + pi_biss_2 + pi_biss_3 + pi_biss_4 +  pi_biss_5 + pi_biss_6, 
+         f_biss_sum = f_biss_1 + f_biss_2 + f_biss_3 + f_biss_4 +  f_biss_5 + f_biss_6, 
+         b_fas_sum = b_fas_1 + b_fas_2 + b_fas_3 + b_fas_4 + b_fas_5 + b_fas_6 + b_fas_7, 
+         pi_fas_sum = pi_fas_1 + pi_fas_2 + pi_fas_3 + pi_fas_4 + pi_fas_5 + pi_fas_6 + pi_fas_7, 
+         f_fas_sum = f_fas_1 + f_fas_2 + f_fas_3 + f_fas_4 + f_fas_5 + f_fas_6 + f_fas_7, 
+         b_biaaq_sum = b_biaaq_1 + b_biaaq_2 + b_biaaq_3 + b_biaaq_4 + b_biaaq_5 + b_biaaq_6 + b_biaaq_7 + b_biaaq_8 + b_biaaq_9 + b_biaaq_10 + b_biaaq_11 + b_biaaq_12, 
+         pi_biaaq_sum = pi_biaaq_1 + pi_biaaq_2 + pi_biaaq_3 + pi_biaaq_4 + pi_biaaq_5 + pi_biaaq_6 + pi_biaaq_7 + pi_biaaq_8 + pi_biaaq_9 + pi_biaaq_10 + pi_biaaq_11 + pi_biaaq_12,  
+        f_biaaq_sum = f_biaaq_1 + f_biaaq_2 + f_biaaq_3 + f_biaaq_4 + f_biaaq_5 + f_biaaq_6 + f_biaaq_7 + f_biaaq_8 + f_biaaq_9 + f_biaaq_10 + f_biaaq_11 + f_biaaq_12, 
+         b_chime_sum = b_chime_1 + b_chime_2 + b_chime_3, 
+         pi_chime_sum = pi_chime_1 + pi_chime_2 + pi_chime_3, 
+         f_chime_sum = f_chime_1 + f_chime_2 + f_chime_3, 
+         pi_pfs_sum = pi_pfs_1 + pi_pfs_2 + pi_pfs_3 + pi_pfs_4 + pi_pfs_5 + pi_pfs_6 + pi_pfs_7, 
+         b_mfq_sum = b_mfq_1 + b_mfq_2 + b_mfq_3 + b_mfq_4 + b_mfq_5 + b_mfq_6 + b_mfq_7 + b_mfq_8 + b_mfq_9 + b_mfq_10 + b_mfq_11 + b_mfq_12 + b_mfq_13,  
+         f_mfq_sum = f_mfq_1 + f_mfq_2 + f_mfq_3 + f_mfq_4 + f_mfq_5 + f_mfq_6 + f_mfq_7 + f_mfq_8 + f_mfq_9 + f_mfq_10 + f_mfq_11 + f_mfq_12 + f_mfq_13, 
+        b_edeq_dietary_restraint = (b_edeq_1 + b_edeq_2 + b_edeq_3) / 3,
+        b_edeq_body_dissatisfaction = (b_edeq_4 + b_edeq_5 + b_edeq_6) / 3,
+        b_edeq_overvaluation = (b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10) / 4,
+        b_edeq_global = (b_edeq_dietary_restraint + b_edeq_body_dissatisfaction + b_edeq_overvaluation) / 3,
+        f_edeq_dietary_restraint = (f_edeq_1 + f_edeq_2 + f_edeq_3) / 3,
+        f_edeq_body_dissatisfaction = (f_edeq_4 + f_edeq_5 + f_edeq_6) / 3,
+        f_edeq_overvaluation = (f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10) / 4,
+        f_edeq_global = (f_edeq_dietary_restraint + f_edeq_body_dissatisfaction + f_edeq_overvaluation) / 3,
+         b_mddi_sum = b_mddi_1 + b_mddi_2 + b_mddi_3 + b_mddi_4 + b_mddi_5 + b_mddi_6 + b_mddi_7 + b_mddi_8 + b_mddi_9 + b_mddi_10 + b_mddi_11 + b_mddi_12 + b_mddi_13, 
+         f_mddi_sum = f_mddi_1 + f_mddi_2 + f_mddi_3 + f_mddi_4 + f_mddi_5 + f_mddi_6 + f_mddi_7 + f_mddi_8 + f_mddi_9 + f_mddi_10 + f_mddi_11 + f_mddi_12 + f_mddi_13)
+```
+
+```{r prepare-randomized-sample}
+#Extract all randomized participants who passed data integrity checks
+all_data_real <- all_data %>% 
+  filter(Include.in.Analysis == "Yes")
+
+#Create variables to identify completion of different stages
+all_data_real <- all_data_real %>%
+  mutate(
+    
+  #Treatment group (Data integrity checks + randomization completed)
+    treatment_group = factor(
+      Condition == "Intervention",
+      levels = c(FALSE, TRUE),
+      labels = c("Control", "Intervention")
+    ),
+    
+  #Intervention completed (regardless of randomization)
+    completer_intervention_assignment = case_when(
+      treatment_group == "Intervention" & `Intervention Completed` == "Intervention Completed" ~ TRUE,
+      treatment_group == "Control" & `Control Completed` == "Control Completed" ~ TRUE,
+      treatment_group == "Intervention" & is.na(`Intervention Completed`) ~ FALSE,
+      treatment_group == "Control" & is.na(`Control Completed`) ~ FALSE
+    ) %>%
+      factor(
+        levels = c(TRUE, FALSE),
+        labels = c("Completed", "Not Completed")
+      ),
+  
+  #Baseline completed
+    completer_baseline = case_when(
+      `Measures Completed.baseline` == "Measures Completed" ~ TRUE,
+      is.na(`Measures Completed.baseline`) ~ FALSE
+    ) %>%
+      factor(
+        levels = c(TRUE, FALSE),
+        labels = c("Completed", "Not Completed")
+    ),
+  
+  #Program feedback completed
+    completer_pfs = case_when(
+      !is.na(pi_pfs_sum) ~ TRUE,
+      is.na(pi_pfs_sum) ~ FALSE
+    ) %>% 
+    factor(
+        levels = c(TRUE, FALSE),
+        labels = c("Completed", "Not Completed")
+    ),
+  
+  #Follow-up completed 
+    completer_followup = case_when(
+      `Measures Completed.followup` == "Measures Completed" ~ TRUE,
+      is.na(`Measures Completed.followup`) ~ FALSE
+    ) %>%
+      factor(
+        levels = c(TRUE, FALSE),
+        labels = c("Completed", "Not Completed")
+        ))
+```
+
+```{r handling-missing-data}
+#Identify participants with greater than 5% missing baseline primary outcomes data
+#For each participant,  add a new column that calculates the percent missing of baseline primary outcome items
+all_data_real <- all_data_real %>%
+  mutate(percent_missing = rowMeans(
+    is.na(select(.,  b_mfq_1,  b_mfq_2,  b_mfq_3,  b_mfq_4,  b_mfq_5,  b_mfq_6,  b_mfq_7,  b_mfq_8,  b_mfq_9,  b_mfq_10,  b_mfq_11,  b_mfq_12,  b_mfq_13,  b_edeq_1,  b_edeq_2,  b_edeq_3,  b_edeq_4,  b_edeq_5,  b_edeq_6,  b_edeq_7,  b_edeq_8,  b_edeq_9,  b_edeq_10)),
+    na.rm = TRUE)) %>%
+  mutate(percent_missing = percent_missing * 100)
+
+#Make a new variable that identifies participants with more than 5% missing data (those with more than 5% missing are TRUE)
+all_data_real <- all_data_real %>%
+  mutate(more_than_5_percent_missing = percent_missing > 5)
+#Remove participants where more_than_5_percent_missing is TRUE
+missingness_handled <- all_data_real %>%
+  filter(!more_than_5_percent_missing)
+```
+
+```{r make-seperate-dataframe-for-quant-data-imputation}
+imputation_ready_with_IDs <- missingness_handled %>%
+   select(Participant_ID, treatment_group,  completer_intervention_assignment, completer_baseline, completer_pfs, completer_followup, starts_with(c("b_dem",  "b_current",  "b_past",  "b_unmet",  "b_hunger",  "b_bhs",  "b_shs_agency",  "b_biss",  "b_fas",  "b_biaaq",  "b_chime",  "b_mfq",  "b_edeq",  "b_mddi",  "pi_pfs",  "pi_bhs",  "pi_shs_agency",  "pi_biss",  "pi_fas",  "pi_biaaq",  "pi_chime",  "f_new",  "f_bhs",  "f_shs_agency",  "f_biss",  "f_fas",  "f_biaaq",  "f_chime",  "f_mfq",  "f_edeq",  "f_mddi"))) %>%
+  select(-contains("free"),  -contains("TEXT"),  -contains("_tim_"),  -contains("pfs_like"),  -contains("pfs_change"),  -contains("pfs_other"), -contains("percent_missing")) 
+
+#Store Participant IDs to add back after imputation (don't want them to be recognized as numbers that mean something)
+participant_ids <- imputation_ready_with_IDs$Participant_ID
+
+#Drop participant IDs for imputation
+ imputation_ready_no_IDs <- imputation_ready_with_IDs %>% 
+  select(-Participant_ID)
+```
+
+```{r imputation}
+set.seed(12345) #use the same seed number each time to make the code reproducible (the seed number is just the starting point used in the generation of a sequence of random numbers in the random forest)
+
+missForest_output <- missForest(imputation_ready_no_IDs)
+imputed_data_error <- missForest_output$OOBerror
+imputed_data <- as.data.frame(missForest_output$ximp)
+imputed_data <- bind_cols(Participant_ID = participant_ids, imputed_data) #add back participant IDs
+write.csv(imputed_data,file='imputed_data.csv')
+```
