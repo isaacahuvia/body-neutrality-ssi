@@ -4,7 +4,37 @@ knitr::opts_knit$set(root.dir = "/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Pr
 setwd("/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
 ```
 
+```{r load-packages}
+#Load required packages
+if(!require(tidyverse)){install.packages('tidyverse')}
+library(tidyverse)
+if(!require(lmtest)){install.packages('lmtest')}
+library(lmtest)
+if(!require(car)){install.packages('car')}
+library(car)
+if(!require(olsrr)){install.packages('olsrr')}
+library(olsrr)
+if(!require(sandwich)){install.packages('sandwich')}
+library(sandwich)
+if(!require(MOTE)){install.packages('MOTE')}
+library(MOTE)
+if(!require(openxlsx)){install.packages('openxlsx')}
+library(openxlsx)
+if(!require(missForest)){install.packages('missForest')}
+library(missForest)
+if(!require(visdat)){install.packages('visdat')}
+library(visdat)
+if(!require(qualtRics)){install.packages('qualtRics')}
+library(qualtRics)
+if(!require(readxl)){install.packages('readxl')}
+library(readxl)
+if(!require(broom)){install.packages('broom')}
+library(broom)
+```
+
 ```{r load-imputed-data}
+missingness_handled <- read.csv("missingness_handled.csv")
+imputation_ready_with_IDs <- read.csv("imputation_ready_with_IDs.csv")
 imputed_data <- read.csv("imputed_data.csv")
 ```
 
@@ -2717,17 +2747,17 @@ missingness_handled %>%
 
 #Completion of all pre-intervention and post-intervention questionnaires - intervention
 missingness_handled %>% 
-  filter(treatment_group == "Intervention" & `Measures Completed.baseline` == "Measures Completed") %>% 
+  filter(treatment_group == "Intervention" & `Measures.Completed.baseline` == "Measures.Completed") %>% 
   count()
 
 #Completion of all follow-up questionnaires - intervention
 missingness_handled %>% 
-  filter(treatment_group == "Intervention" & `Measures Completed.followup` == "Measures Completed") %>% 
+  filter(treatment_group == "Intervention" & `Measures.Completed.followup` == "Measures.Completed") %>% 
   count()
 
 #Completion of all pre-intervention, post-intervention questionnaires, and follow-up questionnaires - intervention
 missingness_handled %>% 
-  filter(treatment_group == "Intervention" & `Measures Completed.baseline` == "Measures Completed" & `Measures Completed.followup` == "Measures Completed") %>% 
+  filter(treatment_group == "Intervention" & `Measures.Completed.baseline` == "Measures.Completed" & `Measures.Completed.followup` == "Measures.Completed") %>% 
   count()
 
 #Number of individuals who began the SSI, regardless of completion - control
@@ -2747,17 +2777,17 @@ missingness_handled %>%
 
 #Completion of all pre-intervention and post-intervention questionnaires - control
 missingness_handled %>% 
-  filter(treatment_group == "Control" & `Measures Completed.baseline` == "Measures Completed") %>% 
+  filter(treatment_group == "Control" & `Measures.Completed.baseline` == "Measures.Completed") %>% 
   count()
 
 #Completion of all follow-up questionnaires - control
 missingness_handled %>% 
-  filter(treatment_group == "Control" & `Measures Completed.followup` == "Measures Completed") %>% 
+  filter(treatment_group == "Control" & `Measures.Completed.followup` == "Measures.Completed") %>% 
   count()
 
 #Completion of all pre-intervention, post-intervention questionnaires, and follow-up questionnaires - control
 missingness_handled %>% 
-  filter(treatment_group == "Control" & `Measures Completed.baseline` == "Measures Completed" & `Measures Completed.followup` == "Measures Completed") %>% 
+  filter(treatment_group == "Control" & `Measures.Completed.baseline` == "Measures.Completed" & `Measures.Completed.followup` == "Measures.Completed") %>% 
   count()
 
 #Duration
@@ -2768,12 +2798,12 @@ missingness_handled_intervention_completers <- missingness_handled %>%
 
 #Extract columns with relevant timing variables
 names_in_order <- missingness_handled_intervention_completers %>%
-  select(ends_with("Page Submit")) %>%
+  select(ends_with("Page.Submit")) %>%
   names()
 
 #Put mean duration and sd for each page into a new data frame
 page_durations <- missingness_handled_intervention_completers %>% #
-  select(ends_with("Page Submit")) %>%
+  select(ends_with("Page.Submit")) %>%
     mutate(across(everything(), ~ as.numeric(as.character(.)))) %>%
   pivot_longer(cols = everything(),
                names_to = "page",
@@ -2861,7 +2891,7 @@ tidy(lm_explore_edeq_1_tot)
 
 #Looks at subgroups based on whether participants were above or below the clinical threshold of 2.8 at baseline
 
-#ITT
+##ITT
 
 ###Make a new variable for the clinical cutoff, identify proportion of participants above and below
 df_randomized_imputed <- df_randomized_imputed %>% 
@@ -2885,13 +2915,139 @@ df_randomized_imputed_below_threshold <- df_randomized_imputed %>%
 df_randomized_imputed_above_threshold <- df_randomized_imputed %>% 
   filter(b_edeq_cutoff == "High")
 
+###Break into intervention and control groups
+df_randomized_imputed_below_threshold_intervention <- df_randomized_imputed_below_threshold %>% 
+  filter(treatment_group == "Intervention")
+df_randomized_imputed_below_threshold_control <- df_randomized_imputed_below_threshold %>% 
+  filter(treatment_group == "Control")
+df_randomized_imputed_above_threshold_intervention <- df_randomized_imputed_above_threshold %>% 
+  filter(treatment_group == "Intervention")
+df_randomized_imputed_above_threshold_control <- df_randomized_imputed_above_threshold %>% 
+  filter(treatment_group == "Control")
+
 ###Look for main effect of treatment group in below threshold
 lm_explore_edeq_2_itt <-lm(f_edeq_global ~ b_edeq_global + treatment_group,  data = df_randomized_imputed_below_threshold)
 tidy(lm_explore_edeq_2_itt)
 
+###Calculate effect sizes for below threshold
+
+####Descriptives for intervention below threshold
+edeq_stats_intervention_itt_below_threshold <- df_randomized_imputed_below_threshold_intervention %>%
+  select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+####Descriptives for control below threshold
+edeq_stats_control_itt_below_threshold <- df_randomized_imputed_below_threshold_control %>%
+  select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+####within-person d(av) for intervention in below threshold
+dav_intervention_edeq_itt_below_threshold <- d.dep.t.avg(m1 = edeq_stats_intervention_itt_below_threshold$b_edeq_global_mean, 
+                                         m2 = edeq_stats_intervention_itt_below_threshold$f_edeq_global_mean, 
+                                         sd1 = edeq_stats_intervention_itt_below_threshold$b_edeq_global_sd, 
+                                         sd2 = edeq_stats_intervention_itt_below_threshold$f_edeq_global_sd, 
+                                         n = edeq_stats_intervention_itt_below_threshold$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+####within-person d(av) for control in below threshold
+dav_control_edeq_itt_below_threshold <- d.dep.t.avg(m1 = edeq_stats_control_itt_below_threshold$b_edeq_global_mean, 
+                                    m2 = edeq_stats_control_itt_below_threshold$f_edeq_global_mean, 
+                                    sd1 = edeq_stats_control_itt_below_threshold$b_edeq_global_sd, 
+                                    sd2 = edeq_stats_control_itt_below_threshold$f_edeq_global_sd, 
+                                    n = edeq_stats_control_itt_below_threshold$n, 
+                                    a = .05) %>%
+  pluck("estimate")
+
+####within-person d(z) for intervention in below threshold
+dz_intervention_edeq_itt_below_threshold <- d.dep.t.diff(mdiff = edeq_stats_intervention_itt_below_threshold$edeq_global_change_pre_followup_mean,
+                                         sddiff = edeq_stats_intervention_itt_below_threshold$edeq_global_change_pre_followup_sd,
+                                         n = edeq_stats_intervention_itt_below_threshold$n,
+                                         a = .05) %>%
+  pluck("estimate")
+
+####within-person d(z) for control in below threshold
+dz_control_edeq_itt_below_threshold <- d.dep.t.diff(mdiff = edeq_stats_control_itt_below_threshold$edeq_global_change_pre_followup_mean,
+                                    sddiff = edeq_stats_control_itt_below_threshold$edeq_global_change_pre_followup_sd,
+                                    n = edeq_stats_control_itt_below_threshold$n,
+                                    a = .05) %>%
+  pluck("estimate")
+
+####between-group d in below threshold
+dbetween_edeq_itt_below_threshold <- d.ind.t(m1 = edeq_stats_intervention_itt_below_threshold$edeq_global_change_pre_followup_mean,  
+                             m2 = edeq_stats_control_itt_below_threshold$edeq_global_change_pre_followup_mean,  
+                             sd1 = edeq_stats_intervention_itt_below_threshold$edeq_global_change_pre_followup_sd,  
+                             sd2 = edeq_stats_control_itt_below_threshold$edeq_global_change_pre_followup_sd,  
+                             n1 = edeq_stats_intervention_itt_below_threshold$n,  
+                             n2 = edeq_stats_control_itt_below_threshold$n,  
+                             a = 0.05) %>%
+  pluck("estimate")
+
 ###Look for main effect of treatment group in above threshold
 lm_explore_edeq_3_itt <-lm(f_edeq_global ~ b_edeq_global + treatment_group,  data = df_randomized_imputed_above_threshold)
 tidy(lm_explore_edeq_3_itt)
+
+###Calculate effect sizes for above threshold
+
+####Descriptives for intervention above threshold
+edeq_stats_intervention_itt_above_threshold <- df_randomized_imputed_above_threshold_intervention %>%
+  select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+####Descriptives for control above threshold
+edeq_stats_control_itt_above_threshold <- df_randomized_imputed_above_threshold_control %>%
+  select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+####within-person d(av) for intervention in above threshold
+dav_intervention_edeq_itt_above_threshold <- d.dep.t.avg(m1 = edeq_stats_intervention_itt_above_threshold$b_edeq_global_mean, 
+                                         m2 = edeq_stats_intervention_itt_above_threshold$f_edeq_global_mean, 
+                                         sd1 = edeq_stats_intervention_itt_above_threshold$b_edeq_global_sd, 
+                                         sd2 = edeq_stats_intervention_itt_above_threshold$f_edeq_global_sd, 
+                                         n = edeq_stats_intervention_itt_above_threshold$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+####within-person d(av) for control in above threshold
+dav_control_edeq_itt_above_threshold <- d.dep.t.avg(m1 = edeq_stats_control_itt_above_threshold$b_edeq_global_mean, 
+                                    m2 = edeq_stats_control_itt_above_threshold$f_edeq_global_mean, 
+                                    sd1 = edeq_stats_control_itt_above_threshold$b_edeq_global_sd, 
+                                    sd2 = edeq_stats_control_itt_above_threshold$f_edeq_global_sd, 
+                                    n = edeq_stats_control_itt_above_threshold$n, 
+                                    a = .05) %>%
+  pluck("estimate")
+
+####within-person d(z) for intervention in above threshold
+dz_intervention_edeq_itt_above_threshold <- d.dep.t.diff(mdiff = edeq_stats_intervention_itt_above_threshold$edeq_global_change_pre_followup_mean,
+                                         sddiff = edeq_stats_intervention_itt_above_threshold$edeq_global_change_pre_followup_sd,
+                                         n = edeq_stats_intervention_itt_above_threshold$n,
+                                         a = .05) %>%
+  pluck("estimate")
+
+####within-person d(z) for control in above threshold
+dz_control_edeq_itt_above_threshold <- d.dep.t.diff(mdiff = edeq_stats_control_itt_above_threshold$edeq_global_change_pre_followup_mean,
+                                    sddiff = edeq_stats_control_itt_above_threshold$edeq_global_change_pre_followup_sd,
+                                    n = edeq_stats_control_itt_above_threshold$n,
+                                    a = .05) %>%
+  pluck("estimate")
+
+####between-group d in above threshold
+dbetween_edeq_itt_above_threshold <- d.ind.t(m1 = edeq_stats_intervention_itt_above_threshold$edeq_global_change_pre_followup_mean,  
+                             m2 = edeq_stats_control_itt_above_threshold$edeq_global_change_pre_followup_mean,  
+                             sd1 = edeq_stats_intervention_itt_above_threshold$edeq_global_change_pre_followup_sd,  
+                             sd2 = edeq_stats_control_itt_above_threshold$edeq_global_change_pre_followup_sd,  
+                             n1 = edeq_stats_intervention_itt_above_threshold$n,  
+                             n2 = edeq_stats_control_itt_above_threshold$n,  
+                             a = 0.05) %>%
+  pluck("estimate")
 
 ##TOT
 
@@ -2917,13 +3073,139 @@ df_completer_intervention_imputed_below_threshold <- df_completer_intervention_i
 df_completer_intervention_imputed_above_threshold <- df_completer_intervention_imputed %>% 
   filter(b_edeq_cutoff == "High")
 
+###Break into intervention and control groups
+df_completer_intervention_imputed_below_threshold_intervention <- df_completer_intervention_imputed_below_threshold %>% 
+  filter(treatment_group == "Intervention")
+df_completer_intervention_imputed_below_threshold_control <- df_completer_intervention_imputed_below_threshold %>% 
+  filter(treatment_group == "Control")
+df_completer_intervention_imputed_above_threshold_intervention <- df_completer_intervention_imputed_above_threshold %>% 
+  filter(treatment_group == "Intervention")
+df_completer_intervention_imputed_above_threshold_control <- df_completer_intervention_imputed_above_threshold %>% 
+  filter(treatment_group == "Control")
+
 ###Look for main effect of treatment group in below threshold
 lm_explore_edeq_2_tot <-lm(f_edeq_global ~ b_edeq_global + treatment_group,  data = df_completer_intervention_imputed_below_threshold)
 tidy(lm_explore_edeq_2_tot)
 
+###Calculate effect sizes for below threshold
+
+####Descriptives for intervention below threshold
+edeq_stats_intervention_tot_below_threshold <- df_completer_intervention_imputed_below_threshold_intervention %>%
+  select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+####Descriptives for control below threshold
+edeq_stats_control_tot_below_threshold <- df_completer_intervention_imputed_below_threshold_control %>%
+  select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+####within-person d(av) for intervention in below threshold
+dav_intervention_edeq_tot_below_threshold <- d.dep.t.avg(m1 = edeq_stats_intervention_tot_below_threshold$b_edeq_global_mean, 
+                                         m2 = edeq_stats_intervention_tot_below_threshold$f_edeq_global_mean, 
+                                         sd1 = edeq_stats_intervention_tot_below_threshold$b_edeq_global_sd, 
+                                         sd2 = edeq_stats_intervention_tot_below_threshold$f_edeq_global_sd, 
+                                         n = edeq_stats_intervention_tot_below_threshold$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+####within-person d(av) for control in below threshold
+dav_control_edeq_tot_below_threshold <- d.dep.t.avg(m1 = edeq_stats_control_tot_below_threshold$b_edeq_global_mean, 
+                                    m2 = edeq_stats_control_tot_below_threshold$f_edeq_global_mean, 
+                                    sd1 = edeq_stats_control_tot_below_threshold$b_edeq_global_sd, 
+                                    sd2 = edeq_stats_control_tot_below_threshold$f_edeq_global_sd, 
+                                    n = edeq_stats_control_tot_below_threshold$n, 
+                                    a = .05) %>%
+  pluck("estimate")
+
+####within-person d(z) for intervention in below threshold
+dz_intervention_edeq_tot_below_threshold <- d.dep.t.diff(mdiff = edeq_stats_intervention_tot_below_threshold$edeq_global_change_pre_followup_mean,
+                                         sddiff = edeq_stats_intervention_tot_below_threshold$edeq_global_change_pre_followup_sd,
+                                         n = edeq_stats_intervention_tot_below_threshold$n,
+                                         a = .05) %>%
+  pluck("estimate")
+
+####within-person d(z) for control in below threshold
+dz_control_edeq_tot_below_threshold <- d.dep.t.diff(mdiff = edeq_stats_control_tot_below_threshold$edeq_global_change_pre_followup_mean,
+                                    sddiff = edeq_stats_control_tot_below_threshold$edeq_global_change_pre_followup_sd,
+                                    n = edeq_stats_control_tot_below_threshold$n,
+                                    a = .05) %>%
+  pluck("estimate")
+
+####between-group d in below threshold
+dbetween_edeq_tot_below_threshold <- d.ind.t(m1 = edeq_stats_intervention_tot_below_threshold$edeq_global_change_pre_followup_mean,  
+                             m2 = edeq_stats_control_tot_below_threshold$edeq_global_change_pre_followup_mean,  
+                             sd1 = edeq_stats_intervention_tot_below_threshold$edeq_global_change_pre_followup_sd,  
+                             sd2 = edeq_stats_control_tot_below_threshold$edeq_global_change_pre_followup_sd,  
+                             n1 = edeq_stats_intervention_tot_below_threshold$n,  
+                             n2 = edeq_stats_control_tot_below_threshold$n,  
+                             a = 0.05) %>%
+  pluck("estimate")
+
 ###Look for main effect of treatment group in above threshold
 lm_explore_edeq_3_tot <-lm(f_edeq_global ~ b_edeq_global + treatment_group,  data = df_completer_intervention_imputed_above_threshold)
 tidy(lm_explore_edeq_3_tot)
+
+###Calculate effect sizes for above threshold
+
+####Descriptives for intervention above threshold
+edeq_stats_intervention_tot_above_threshold <- df_completer_intervention_imputed_above_threshold_intervention %>%
+  select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+####Descriptives for control above threshold
+edeq_stats_control_tot_above_threshold <- df_completer_intervention_imputed_above_threshold_control %>%
+  select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+####within-person d(av) for intervention in above threshold
+dav_intervention_edeq_tot_above_threshold <- d.dep.t.avg(m1 = edeq_stats_intervention_tot_above_threshold$b_edeq_global_mean, 
+                                         m2 = edeq_stats_intervention_tot_above_threshold$f_edeq_global_mean, 
+                                         sd1 = edeq_stats_intervention_tot_above_threshold$b_edeq_global_sd, 
+                                         sd2 = edeq_stats_intervention_tot_above_threshold$f_edeq_global_sd, 
+                                         n = edeq_stats_intervention_tot_above_threshold$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+####within-person d(av) for control in above threshold
+dav_control_edeq_tot_above_threshold <- d.dep.t.avg(m1 = edeq_stats_control_tot_above_threshold$b_edeq_global_mean, 
+                                    m2 = edeq_stats_control_tot_above_threshold$f_edeq_global_mean, 
+                                    sd1 = edeq_stats_control_tot_above_threshold$b_edeq_global_sd, 
+                                    sd2 = edeq_stats_control_tot_above_threshold$f_edeq_global_sd, 
+                                    n = edeq_stats_control_tot_above_threshold$n, 
+                                    a = .05) %>%
+  pluck("estimate")
+
+####within-person d(z) for intervention in above threshold
+dz_intervention_edeq_tot_above_threshold <- d.dep.t.diff(mdiff = edeq_stats_intervention_tot_above_threshold$edeq_global_change_pre_followup_mean,
+                                         sddiff = edeq_stats_intervention_tot_above_threshold$edeq_global_change_pre_followup_sd,
+                                         n = edeq_stats_intervention_tot_above_threshold$n,
+                                         a = .05) %>%
+  pluck("estimate")
+
+####within-person d(z) for control in above threshold
+dz_control_edeq_tot_above_threshold <- d.dep.t.diff(mdiff = edeq_stats_control_tot_above_threshold$edeq_global_change_pre_followup_mean,
+                                    sddiff = edeq_stats_control_tot_above_threshold$edeq_global_change_pre_followup_sd,
+                                    n = edeq_stats_control_tot_above_threshold$n,
+                                    a = .05) %>%
+  pluck("estimate")
+
+####between-group d in above threshold
+dbetween_edeq_tot_above_threshold <- d.ind.t(m1 = edeq_stats_intervention_tot_above_threshold$edeq_global_change_pre_followup_mean,  
+                             m2 = edeq_stats_control_tot_above_threshold$edeq_global_change_pre_followup_mean,  
+                             sd1 = edeq_stats_intervention_tot_above_threshold$edeq_global_change_pre_followup_sd,  
+                             sd2 = edeq_stats_control_tot_above_threshold$edeq_global_change_pre_followup_sd,  
+                             n1 = edeq_stats_intervention_tot_above_threshold$n,  
+                             n2 = edeq_stats_control_tot_above_threshold$n,  
+                             a = 0.05) %>%
+  pluck("estimate")
 
 #Moderation based on continuous baseline MFQ score, outcome is continuous follow-up MFQ score
 

@@ -233,12 +233,14 @@ all_data_real <- all_data_real %>%
 #Remove participants where more_than_5_percent_missing is TRUE
 missingness_handled <- all_data_real %>%
   filter(!more_than_5_percent_missing)
+write.csv(missingness_handled, file = "missingness_handled.csv")
 ```
 
 ```{r make-seperate-dataframe-for-quant-data-imputation}
 imputation_ready_with_IDs <- missingness_handled %>%
    select(Participant_ID, treatment_group,  completer_intervention_assignment, completer_baseline, completer_pfs, completer_followup, starts_with(c("b_dem",  "b_current",  "b_past",  "b_unmet",  "b_hunger",  "b_bhs",  "b_shs_agency",  "b_biss",  "b_fas",  "b_biaaq",  "b_chime",  "b_mfq",  "b_edeq",  "b_mddi",  "pi_pfs",  "pi_bhs",  "pi_shs_agency",  "pi_biss",  "pi_fas",  "pi_biaaq",  "pi_chime",  "f_new",  "f_bhs",  "f_shs_agency",  "f_biss",  "f_fas",  "f_biaaq",  "f_chime",  "f_mfq",  "f_edeq",  "f_mddi"))) %>%
   select(-contains("free"),  -contains("TEXT"),  -contains("_tim_"),  -contains("pfs_like"),  -contains("pfs_change"),  -contains("pfs_other"), -contains("percent_missing")) 
+write.csv(imputation_ready_with_IDs, file="imputation_ready_with_IDs.csv")
 
 #Store Participant IDs to add back after imputation (don't want them to be recognized as numbers that mean something)
 participant_ids <- imputation_ready_with_IDs$Participant_ID
