@@ -30,6 +30,8 @@ if(!require(readxl)){install.packages('readxl')}
 library(readxl)
 if(!require(broom)){install.packages('broom')}
 library(broom)
+if(!require(psych)){install.packages('psych')}
+library(psych)
 ```
 
 ```{r load-imputed-data}
@@ -2637,10 +2639,22 @@ df_completer_pfs_nonimputed_intervention %>%
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
   summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
 
+#N and percent of intervention participants with sum score >4 (Strongly Agree only),  reflect overall perceived SSI acceptability
+df_completer_pfs_nonimputed_intervention %>%
+  mutate(pi_pfs_sum_scores = pi_pfs_sum / 7,  
+         pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 4) %>%
+  summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
+
 #N and percent of control participants with sum score >3 (selects Agree and Strongly Agree only),  reflect overall perceived SSI acceptability
 df_completer_pfs_nonimputed_control %>%
   mutate(pi_pfs_sum_scores = pi_pfs_sum / 7,  
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
+  summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
+
+#N and percent of control participants with sum score >4 (selects Strongly Agree only),  reflect overall perceived SSI acceptability
+df_completer_pfs_nonimputed_control %>%
+  mutate(pi_pfs_sum_scores = pi_pfs_sum / 7,  
+         pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 4) %>%
   summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
 ```
 
@@ -2747,17 +2761,17 @@ missingness_handled %>%
 
 #Completion of all pre-intervention and post-intervention questionnaires - intervention
 missingness_handled %>% 
-  filter(treatment_group == "Intervention" & `Measures.Completed.baseline` == "Measures.Completed") %>% 
+  filter(treatment_group == "Intervention" & `Measures.Completed.baseline` == "Measures Completed") %>% 
   count()
 
 #Completion of all follow-up questionnaires - intervention
 missingness_handled %>% 
-  filter(treatment_group == "Intervention" & `Measures.Completed.followup` == "Measures.Completed") %>% 
+  filter(treatment_group == "Intervention" & `Measures.Completed.followup` == "Measures Completed") %>% 
   count()
 
 #Completion of all pre-intervention, post-intervention questionnaires, and follow-up questionnaires - intervention
 missingness_handled %>% 
-  filter(treatment_group == "Intervention" & `Measures.Completed.baseline` == "Measures.Completed" & `Measures.Completed.followup` == "Measures.Completed") %>% 
+  filter(treatment_group == "Intervention" & `Measures.Completed.baseline` == "Measures Completed" & `Measures.Completed.followup` == "Measures Completed") %>% 
   count()
 
 #Number of individuals who began the SSI, regardless of completion - control
@@ -2777,17 +2791,17 @@ missingness_handled %>%
 
 #Completion of all pre-intervention and post-intervention questionnaires - control
 missingness_handled %>% 
-  filter(treatment_group == "Control" & `Measures.Completed.baseline` == "Measures.Completed") %>% 
+  filter(treatment_group == "Control" & `Measures.Completed.baseline` == "Measures Completed") %>% 
   count()
 
 #Completion of all follow-up questionnaires - control
 missingness_handled %>% 
-  filter(treatment_group == "Control" & `Measures.Completed.followup` == "Measures.Completed") %>% 
+  filter(treatment_group == "Control" & `Measures.Completed.followup` == "Measures Completed") %>% 
   count()
 
 #Completion of all pre-intervention, post-intervention questionnaires, and follow-up questionnaires - control
 missingness_handled %>% 
-  filter(treatment_group == "Control" & `Measures.Completed.baseline` == "Measures.Completed" & `Measures.Completed.followup` == "Measures.Completed") %>% 
+  filter(treatment_group == "Control" & `Measures.Completed.baseline` == "Measures Completed" & `Measures.Completed.followup` == "Measures Completed") %>% 
   count()
 
 #Duration
@@ -3255,4 +3269,168 @@ df_randomized_imputed %>%
     y = "EDE-Q Global Score"
   ) +
   theme_classic()
+```
+
+```{r plot for proximal outcomes - ITT}
+df_bhs <- descriptives %>%
+  select(treatment_group, b_bhs_sum_mean, pi_bhs_sum_mean) %>%
+  rename(Pre = b_bhs_sum_mean, Post = pi_bhs_sum_mean) %>%
+  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
+  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
+plot_bhs <- ggplot(df_bhs, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Hopelessness", x = "Time", y = "Score", color = "Treatment Group") +
+  theme_classic()
+plot_bhs
+
+df_shs_agency <- descriptives %>%
+  select(treatment_group, b_shs_agency_sum_mean, pi_shs_agency_sum_mean) %>%
+  rename(Pre = b_shs_agency_sum_mean, Post = pi_shs_agency_sum_mean) %>%
+  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
+  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
+plot_shs_agency <- ggplot(df_shs_agency, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Agency", x = "Time", y = "Score", color = "Treatment Group") +
+  theme_classic()
+plot_shs_agency
+
+df_fas <- descriptives %>%
+  select(treatment_group, b_fas_sum_mean, pi_fas_sum_mean) %>%
+  rename(Pre = b_fas_sum_mean, Post = pi_fas_sum_mean) %>%
+  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
+  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
+plot_fas <- ggplot(df_fas, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Functionality Appreciation", x = "Time", y = "Score", color = "Treatment Group") +
+  theme_classic()
+plot_fas
+
+df_biss <- descriptives %>%
+  select(treatment_group, b_biss_sum_mean, pi_biss_sum_mean) %>%
+  rename(Pre = b_biss_sum_mean, Post = pi_biss_sum_mean) %>%
+  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
+  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
+plot_biss <- ggplot(df_biss, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "State Body Image", x = "Time", y = "Score", color = "Treatment Group") +
+  theme_classic()
+plot_biss
+
+grid.arrange(plot_bhs, plot_shs_agency, plot_fas, plot_biss, ncol = 2)
+```
+
+```{r internal-consistency-itt}
+#EDEQ
+b_edeq_df <- df_randomized_imputed %>%
+  dplyr::select(b_edeq_1:b_edeq_10)
+cronbach.alpha(b_edeq_df)
+
+f_edeq_df <- df_randomized_imputed %>%
+  dplyr::select(f_edeq_1:f_edeq_10)
+cronbach.alpha(f_edeq_df)
+
+#MFQ
+b_mfq_df <- df_randomized_imputed %>%
+  dplyr::select(b_mfq_1:b_mfq_13)
+cronbach.alpha(b_mfq_df)
+
+f_mfq_df <- df_randomized_imputed %>%
+  dplyr::select(f_mfq_1:f_mfq_13)
+cronbach.alpha(f_mfq_df)
+
+#BHS
+b_bhs_df <- df_randomized_imputed %>%
+  dplyr::select(b_bhs_1:b_bhs_4)
+cronbach.alpha(b_bhs_df)
+
+pi_bhs_df <- df_randomized_imputed %>%
+  dplyr::select(pi_bhs_1:pi_bhs_4)
+cronbach.alpha(pi_bhs_df)
+
+f_bhs_df <- df_randomized_imputed %>%
+  dplyr::select(f_bhs_1:f_bhs_4)
+cronbach.alpha(f_bhs_df)
+
+#SHS
+b_shs_agency_df <- df_randomized_imputed %>%
+  dplyr::select(b_shs_agency_1:b_shs_agency_3)
+cronbach.alpha(b_shs_agency_df)
+
+pi_shs_agency_df <- df_randomized_imputed %>%
+  dplyr::select(pi_shs_agency_1:pi_shs_agency_3)
+cronbach.alpha(pi_shs_agency_df)
+
+f_shs_agency_df <- df_randomized_imputed %>%
+  dplyr::select(f_shs_agency_1:f_shs_agency_3)
+cronbach.alpha(f_shs_agency_df)
+
+#FAS
+b_fas_df <- df_randomized_imputed %>%
+  dplyr::select(b_fas_1:b_fas_7)
+cronbach.alpha(b_fas_df)
+
+pi_fas_df <- df_randomized_imputed %>%
+  dplyr::select(pi_fas_1:pi_fas_7)
+cronbach.alpha(pi_fas_df)
+
+f_fas_df <- df_randomized_imputed %>%
+  dplyr::select(f_fas_1:f_fas_7)
+cronbach.alpha(f_fas_df)
+
+#BISS
+b_biss_df <- df_randomized_imputed %>%
+  dplyr::select(b_biss_1:b_biss_6)
+cronbach.alpha(b_biss_df)
+
+pi_biss_df <- df_randomized_imputed %>%
+  dplyr::select(pi_biss_1:pi_biss_6)
+cronbach.alpha(pi_biss_df)
+
+f_biss_df <- df_randomized_imputed %>%
+  dplyr::select(f_biss_1:f_biss_6)
+cronbach.alpha(f_biss_df)
+
+#PFS
+pi_pfs_df <- df_randomized_imputed %>%
+  dplyr::select(pi_pfs_1:pi_pfs_7)
+cronbach.alpha(pi_pfs_df)
+
+#MDDI
+b_mddi_df <- df_randomized_imputed %>%
+  dplyr::select(b_mddi_1:b_mddi_13)
+cronbach.alpha(b_mddi_df)
+
+f_mddi_df <- df_randomized_imputed %>%
+  dplyr::select(f_mddi_1:f_mddi_13)
+cronbach.alpha(f_mddi_df)
+
+#BIAAQ
+b_biaaq_df <- df_randomized_imputed %>%
+  dplyr::select(b_biaaq_1:b_biaaq_12)
+cronbach.alpha(b_biaaq_df)
+
+pi_biaaq_df <- df_randomized_imputed %>%
+  dplyr::select(pi_biaaq_1:pi_biaaq_12)
+cronbach.alpha(pi_biaaq_df)
+
+f_biaaq_df <- df_randomized_imputed %>%
+  dplyr::select(f_biaaq_1:f_biaaq_12)
+cronbach.alpha(f_biaaq_df)
+
+#CHIME-A
+b_chime_df <- df_randomized_imputed %>%
+  dplyr::select(b_chime_1:b_chime_3)
+cronbach.alpha(b_chime_df)
+
+pi_chime_df <- df_randomized_imputed %>%
+  dplyr::select(pi_chime_1:pi_chime_3)
+cronbach.alpha(pi_chime_df)
+
+f_chime_df <- df_randomized_imputed %>%
+  dplyr::select(f_chime_1:f_chime_3)
+cronbach.alpha(f_chime_df)
 ```
