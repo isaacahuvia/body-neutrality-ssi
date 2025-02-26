@@ -40,7 +40,7 @@ participant_database <- read.csv(
   stringsAsFactors = FALSE,
   colClasses = "character"
 ) %>%
-  select(
+  dplyr::select(
     Participant_ID,
     Include.in.Analysis,
     Compensation.Date,
@@ -57,7 +57,7 @@ print(cols_in_original_only)
 
 #Remove the 2 extra Qualtrics columns from original_baseline_survey_data (won't mess things up because they are at the end and don't have anything important)
 original_baseline_survey_data <- original_baseline_survey_data %>%
-  select(-Q_AmbiguousTextPresent,  -Q_AmbiguousTextQuestions)
+  dplyr::select(-Q_AmbiguousTextPresent,  -Q_AmbiguousTextQuestions)
 
 #Now we can merge
 merged_baseline_data <- bind_rows(original_baseline_survey_data,  new_baseline_survey_data)
@@ -87,7 +87,7 @@ all_data <- merged_participant_database_baseline_data %>%
 
 #First focus on transforming gender
 transforming_gender <- all_data %>% 
-  select(b_dem_gender, Participant_ID) %>%
+  dplyr::select(b_dem_gender, Participant_ID) %>%
   separate_rows(b_dem_gender, sep = ",") %>%
   pivot_wider(
     names_from = b_dem_gender,
@@ -98,7 +98,7 @@ transforming_gender <- all_data %>%
 
 #Now focus on transforming race/ethnicity
 transforming_race_ethnicity <- all_data %>% 
-  select(b_dem_race_ethnicity, Participant_ID) %>%
+  dplyr::select(b_dem_race_ethnicity, Participant_ID) %>%
   separate_rows(b_dem_race_ethnicity, sep = ",") %>%
   pivot_wider(
     names_from = b_dem_race_ethnicity,
@@ -118,7 +118,7 @@ all_data <- all_data %>%
 
 #And I need to make all necessary variables numeric
 all_data <- all_data %>%
-  select(-contains("text"), -contains("free"), -b_dem_gender, -b_dem_race_ethnicity) %>% #remove free text and old demographic variables
+  dplyr::select(-contains("text"), -contains("free"), -b_dem_gender, -b_dem_race_ethnicity) %>% #remove free text and old demographic variables
   mutate(across(c(pi_pfs_1:pi_pfs_7,  starts_with("b_dem_age"), starts_with("b_bhs"),  starts_with("b_shs_agency"), starts_with("b_biss"),  starts_with("b_fas"),  starts_with("b_biaaq"),   starts_with("b_chime"),  starts_with("b_mfq"),  starts_with("b_edeq"),  starts_with("b_mddi"),  starts_with("pi_bhs"),  starts_with("pi_shs_agency"),  starts_with("pi_biss"),  starts_with("pi_fas"),  starts_with("pi_biaaq"),  starts_with("pi_chime"),  starts_with("f_bhs"),  starts_with("f_shs_agency"),  starts_with("f_biss"),  starts_with("f_fas"),  starts_with("f_biaaq"), starts_with("f_chime"),  starts_with("f_mfq"),  starts_with("f_edeq"),  starts_with("f_mddi")),  
                 as.numeric))
 ```
@@ -148,13 +148,13 @@ all_data <- all_data %>%
          b_mfq_sum = b_mfq_1 + b_mfq_2 + b_mfq_3 + b_mfq_4 + b_mfq_5 + b_mfq_6 + b_mfq_7 + b_mfq_8 + b_mfq_9 + b_mfq_10 + b_mfq_11 + b_mfq_12 + b_mfq_13,  
          f_mfq_sum = f_mfq_1 + f_mfq_2 + f_mfq_3 + f_mfq_4 + f_mfq_5 + f_mfq_6 + f_mfq_7 + f_mfq_8 + f_mfq_9 + f_mfq_10 + f_mfq_11 + f_mfq_12 + f_mfq_13, 
         b_edeq_dietary_restraint = (b_edeq_1 + b_edeq_2 + b_edeq_3) / 3,
-        b_edeq_body_dissatisfaction = (b_edeq_4 + b_edeq_5 + b_edeq_6) / 3,
+        b_edeq_preoccupation_eatingconcern = (b_edeq_4 + b_edeq_5 + b_edeq_6) / 3,
         b_edeq_overvaluation = (b_edeq_7 + b_edeq_8 + b_edeq_9 + b_edeq_10) / 4,
-        b_edeq_global = (b_edeq_dietary_restraint + b_edeq_body_dissatisfaction + b_edeq_overvaluation) / 3,
+        b_edeq_global = (b_edeq_dietary_restraint + b_edeq_preoccupation_eatingconcern + b_edeq_overvaluation) / 3,
         f_edeq_dietary_restraint = (f_edeq_1 + f_edeq_2 + f_edeq_3) / 3,
-        f_edeq_body_dissatisfaction = (f_edeq_4 + f_edeq_5 + f_edeq_6) / 3,
+        f_edeq_preoccupation_eatingconcern = (f_edeq_4 + f_edeq_5 + f_edeq_6) / 3,
         f_edeq_overvaluation = (f_edeq_7 + f_edeq_8 + f_edeq_9 + f_edeq_10) / 4,
-        f_edeq_global = (f_edeq_dietary_restraint + f_edeq_body_dissatisfaction + f_edeq_overvaluation) / 3,
+        f_edeq_global = (f_edeq_dietary_restraint + f_edeq_preoccupation_eatingconcern + f_edeq_overvaluation) / 3,
          b_mddi_sum = b_mddi_1 + b_mddi_2 + b_mddi_3 + b_mddi_4 + b_mddi_5 + b_mddi_6 + b_mddi_7 + b_mddi_8 + b_mddi_9 + b_mddi_10 + b_mddi_11 + b_mddi_12 + b_mddi_13, 
          f_mddi_sum = f_mddi_1 + f_mddi_2 + f_mddi_3 + f_mddi_4 + f_mddi_5 + f_mddi_6 + f_mddi_7 + f_mddi_8 + f_mddi_9 + f_mddi_10 + f_mddi_11 + f_mddi_12 + f_mddi_13)
 ```
@@ -223,7 +223,7 @@ all_data_real <- all_data_real %>%
 #For each participant,  add a new column that calculates the percent missing of baseline primary outcome items
 all_data_real <- all_data_real %>%
   mutate(percent_missing = rowMeans(
-    is.na(select(.,  b_mfq_1,  b_mfq_2,  b_mfq_3,  b_mfq_4,  b_mfq_5,  b_mfq_6,  b_mfq_7,  b_mfq_8,  b_mfq_9,  b_mfq_10,  b_mfq_11,  b_mfq_12,  b_mfq_13,  b_edeq_1,  b_edeq_2,  b_edeq_3,  b_edeq_4,  b_edeq_5,  b_edeq_6,  b_edeq_7,  b_edeq_8,  b_edeq_9,  b_edeq_10)),
+    is.na(dplyr::select(.,  b_mfq_1,  b_mfq_2,  b_mfq_3,  b_mfq_4,  b_mfq_5,  b_mfq_6,  b_mfq_7,  b_mfq_8,  b_mfq_9,  b_mfq_10,  b_mfq_11,  b_mfq_12,  b_mfq_13,  b_edeq_1,  b_edeq_2,  b_edeq_3,  b_edeq_4,  b_edeq_5,  b_edeq_6,  b_edeq_7,  b_edeq_8,  b_edeq_9,  b_edeq_10)),
     na.rm = TRUE)) %>%
   mutate(percent_missing = percent_missing * 100)
 
@@ -238,8 +238,8 @@ write.csv(missingness_handled, file = "missingness_handled.csv")
 
 ```{r make-seperate-dataframe-for-quant-data-imputation}
 imputation_ready_with_IDs <- missingness_handled %>%
-   select(Participant_ID, treatment_group,  completer_intervention_assignment, completer_baseline, completer_pfs, completer_followup, starts_with(c("b_dem",  "b_current",  "b_past",  "b_unmet",  "b_hunger",  "b_bhs",  "b_shs_agency",  "b_biss",  "b_fas",  "b_biaaq",  "b_chime",  "b_mfq",  "b_edeq",  "b_mddi",  "pi_pfs",  "pi_bhs",  "pi_shs_agency",  "pi_biss",  "pi_fas",  "pi_biaaq",  "pi_chime",  "f_new",  "f_bhs",  "f_shs_agency",  "f_biss",  "f_fas",  "f_biaaq",  "f_chime",  "f_mfq",  "f_edeq",  "f_mddi"))) %>%
-  select(-contains("free"),  -contains("TEXT"),  -contains("_tim_"),  -contains("pfs_like"),  -contains("pfs_change"),  -contains("pfs_other"), -contains("percent_missing")) 
+   dplyr::select(Participant_ID, treatment_group,  completer_intervention_assignment, completer_baseline, completer_pfs, completer_followup, starts_with(c("b_dem",  "b_current",  "b_past",  "b_unmet",  "b_hunger",  "b_bhs",  "b_shs_agency",  "b_biss",  "b_fas",  "b_biaaq",  "b_chime",  "b_mfq",  "b_edeq",  "b_mddi",  "pi_pfs",  "pi_bhs",  "pi_shs_agency",  "pi_biss",  "pi_fas",  "pi_biaaq",  "pi_chime",  "f_new",  "f_bhs",  "f_shs_agency",  "f_biss",  "f_fas",  "f_biaaq",  "f_chime",  "f_mfq",  "f_edeq",  "f_mddi"))) %>%
+  dplyr::select(-contains("free"),  -contains("TEXT"),  -contains("_tim_"),  -contains("pfs_like"),  -contains("pfs_change"),  -contains("pfs_other"), -contains("percent_missing")) 
 write.csv(imputation_ready_with_IDs, file="imputation_ready_with_IDs.csv")
 
 #Store Participant IDs to add back after imputation (don't want them to be recognized as numbers that mean something)
@@ -247,15 +247,15 @@ participant_ids <- imputation_ready_with_IDs$Participant_ID
 
 #Drop participant IDs for imputation
  imputation_ready_no_IDs <- imputation_ready_with_IDs %>% 
-  select(-Participant_ID)
+  dplyr::select(-Participant_ID)
 ```
 
 ```{r imputation}
 set.seed(12345) #use the same seed number each time to make the code reproducible (the seed number is just the starting point used in the generation of a sequence of random numbers in the random forest)
 
-missForest_output <- missForest(imputation_ready_no_IDs)
-imputed_data_error <- missForest_output$OOBerror
-imputed_data <- as.data.frame(missForest_output$ximp)
-imputed_data <- bind_cols(Participant_ID = participant_ids, imputed_data) #add back participant IDs
-write.csv(imputed_data,file='imputed_data.csv')
+#missForest_output <- missForest(imputation_ready_no_IDs)
+#imputed_data_error <- missForest_output$OOBerror
+#imputed_data <- as.data.frame(missForest_output$ximp)
+#imputed_data <- bind_cols(Participant_ID = participant_ids, imputed_data) #add back participant IDs
+#write.csv(imputed_data,file='imputed_data.csv')
 ```
