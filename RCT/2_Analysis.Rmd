@@ -32,6 +32,12 @@ if(!require(broom)){install.packages('broom')}
 library(broom)
 if(!require(psych)){install.packages('psych')}
 library(psych)
+if(!require(lmerTest)){install.packages('lmerTest')}
+library(lmerTest)
+if(!require(ltm)){install.packages('ltm')}
+library(ltm)
+
+options(digits = 5)
 ```
 
 ```{r load-imputed-data}
@@ -44,7 +50,7 @@ imputed_data <- read.csv("imputed_data.csv")
 #Randomized (imputed)
 df_randomized_imputed <- imputed_data #no filtering needed
 
-#Completed intervention (regardless of randomization; imputed)
+#Completed intervention (imputed)
 df_completer_intervention_imputed <- imputed_data %>% 
   filter(completer_intervention_assignment == "Completed")
 
@@ -52,37 +58,53 @@ df_completer_intervention_imputed <- imputed_data %>%
 df_completer_baseline_imputed <- imputed_data %>% 
   filter(completer_baseline == "Completed")
 
-#Completed PFS (nonimputed) - need non-imputed for qual analyses
+#Completed PFS (nonimputed) - need non-imputed for acceptability
 df_completer_pfs_nonimputed <- imputation_ready_with_IDs %>%
   filter(completer_pfs == "Completed")
 
-#Completed followup (nonimputed) - full completers
+#Completed followup aka full completers (nonimputed)
 df_completer_followup_nonimputed <- imputation_ready_with_IDs %>%
   filter(completer_followup == "Completed")
 ```
 
 ```{r extract-data-for-qual-analysis}
 #Dataframe for qualitative analysis (intervention completers with PFS data)
-qual_data_intervention <- missingness_handled %>% 
+qual_data_intervention <- df_completer_pfs_nonimputed %>% 
   filter(completer_pfs == "Completed" & treatment_group == "Intervention") %>% 
-  select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)  
-qual_data_control <- missingness_handled %>% 
+  dplyr::select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)  
+qual_data_control <- df_completer_pfs_nonimputed %>% 
   filter(completer_pfs == "Completed" & treatment_group == "Control") %>% 
-  select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)  
+  dplyr::select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)  
 
-#Table export (only run again if file gets deleted)
+#Table export
 #flextable::flextable(qual_data_intervention,  cwidth = c(0.5, 7, 0.5))
 #write.xlsx(qual_data_intervention,  "pfs_qual_intervention.xlsx")
 #flextable::flextable(qual_data_control,  cwidth = c(0.5, 7, 0.5))
 #write.xlsx(qual_data_control,  "pfs_qual_control.xlsx")
+
+#Dataframe of Sharing Feelings responses
+sf_open_ended <- missingness_handled %>% 
+  dplyr::select(treatment_group, sf_11, sf_23, sf_24) %>% 
+  filter(treatment_group == "Control")
+#flextable::flextable(sf_open_ended,  cwidth = c(0.5, 7, 0.5))
+#write.xlsx(sf_open_ended,  "sf_open_ended.xlsx")
 ```
 
 ```{r descriptives-of-outcomes}
-descriptives <- df_randomized_imputed %>%
+#ITT
+descriptives_itt <- df_randomized_imputed %>%
   group_by(treatment_group) %>%
-  summarize(across(c(b_bhs_sum,  pi_bhs_sum,  f_bhs_sum, b_shs_agency_sum,  pi_shs_agency_sum,  f_shs_agency_sum, b_biss_sum,  pi_biss_sum, f_biss_sum,  b_fas_sum,  pi_fas_sum,  f_fas_sum, b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum, b_chime_sum,  pi_chime_sum,  f_chime_sum, b_mfq_sum, f_mfq_sum, b_edeq_global, f_edeq_global, b_mddi_sum, f_mddi_sum),  
+  summarize(across(c(b_bhs_sum,  pi_bhs_sum,  f_bhs_sum, b_shs_agency_sum,  pi_shs_agency_sum,  f_shs_agency_sum, b_biss_sum,  pi_biss_sum, f_biss_sum,  b_fas_sum,  pi_fas_sum,  f_fas_sum, b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum, b_chime_sum,  pi_chime_sum,  f_chime_sum, b_mfq_sum, f_mfq_sum, b_edeq_global, f_edeq_global, b_mddi_sum, f_mddi_sum, b_edeq_dietary_restraint, f_edeq_dietary_restraint, b_edeq_preoccupation_eatingconcern, f_edeq_preoccupation_eatingconcern, b_edeq_overvaluation, f_edeq_overvaluation),  
                    list(mean = mean,  sd = sd)))
-print(descriptives)
+print(descriptives_itt)
+
+#TOT
+descriptives_tot <- df_completer_intervention_imputed %>%
+  group_by(treatment_group) %>%
+  summarize(across(c(b_bhs_sum,  pi_bhs_sum,  f_bhs_sum, b_shs_agency_sum,  pi_shs_agency_sum,  f_shs_agency_sum, b_biss_sum,  pi_biss_sum, f_biss_sum,  b_fas_sum,  pi_fas_sum,  f_fas_sum, b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum, b_chime_sum,  pi_chime_sum,  f_chime_sum, b_mfq_sum, f_mfq_sum, b_edeq_global, f_edeq_global, b_mddi_sum, f_mddi_sum, b_edeq_dietary_restraint, f_edeq_dietary_restraint, b_edeq_preoccupation_eatingconcern, f_edeq_preoccupation_eatingconcern, b_edeq_overvaluation, f_edeq_overvaluation),  
+                   list(mean = mean,  sd = sd)))
+print(descriptives_tot)
+
 ```
 
 ```{r primary-analysis-1-ITT}
@@ -97,9 +119,11 @@ tidy(lm_bhs_itt_1_robust, conf.int = T) #model with robust standard errors to co
 p_value_bhs_itt_1_robust <- lm_bhs_itt_1_robust %>% 
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
-  pull(p.value)
-
-#extract p value from robust model
+  pull(p.value) #extract p value from robust model
+t_value_bhs_itt_1_robust <- lm_bhs_itt_1_robust %>% 
+  tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) #extract t-value from robust model
 
 #Hopelessness pre-followup
 lm_bhs_itt_2 <- lm(f_bhs_sum ~ b_bhs_sum + treatment_group,  data = df_randomized_imputed)
@@ -113,6 +137,10 @@ p_value_bhs_itt_2_robust <- lm_bhs_itt_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_bhs_itt_2_robust <- lm_bhs_itt_2_robust %>% 
+  tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Agency pre-post
 lm_shs_agency_itt_1 <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + treatment_group,  data = df_randomized_imputed)
@@ -126,6 +154,10 @@ p_value_shs_agency_itt_1_robust <- lm_shs_agency_itt_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_shs_agency_itt_1_robust <- lm_shs_agency_itt_1_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic)
 
 #Agency pre-followup
 lm_shs_agency_itt_2 <- lm(f_shs_agency_sum ~ b_shs_agency_sum + treatment_group,  data = df_randomized_imputed)
@@ -139,7 +171,11 @@ p_value_shs_agency_itt_2_robust <- lm_shs_agency_itt_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
-
+t_value_shs_agency_itt_2_robust <- lm_shs_agency_itt_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
+  
 #Body image state pre-post
 lm_biss_itt_1 <- lm(pi_biss_sum ~ b_biss_sum + treatment_group,  data = df_randomized_imputed)
 tidy(lm_biss_itt_1, conf.int = T) 
@@ -152,6 +188,10 @@ p_value_biss_itt_1_robust <- lm_biss_itt_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_biss_itt_1_robust <- lm_biss_itt_1_robust %>% 
+   tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body image state pre-followup
 lm_biss_itt_2 <- lm(f_biss_sum ~ b_biss_sum + treatment_group,  data = df_randomized_imputed)
@@ -165,7 +205,11 @@ p_value_biss_itt_2_robust <- lm_biss_itt_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
-
+t_value_biss_itt_2_robust <- lm_biss_itt_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
+  
 #Functionality appreciation pre-post
 lm_fas_itt_1 <- lm(pi_fas_sum ~ b_fas_sum + treatment_group,  data = df_randomized_imputed)
 tidy(lm_fas_itt_1, conf.int = T) 
@@ -178,6 +222,10 @@ p_value_fas_itt_1_robust <- lm_fas_itt_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_fas_itt_1_robust <- lm_fas_itt_1_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Functionality appreciation pre-followup
 lm_fas_itt_2 <- lm(f_fas_sum ~ b_fas_sum + treatment_group,  data = df_randomized_imputed)
@@ -191,6 +239,10 @@ p_value_fas_itt_2_robust <- lm_fas_itt_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_fas_itt_2_robust <- lm_fas_itt_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body image flexibility pre-post - EXPLORATORY
 lm_biaaq_itt_1 <- lm(pi_biaaq_sum ~ b_biaaq_sum + treatment_group,  data = df_randomized_imputed)
@@ -204,6 +256,10 @@ p_value_biaaq_itt_1_robust <- lm_biaaq_itt_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_biaaq_itt_1_robust <- lm_biaaq_itt_1_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body image flexibility pre-followup - EXPLORATORY
 lm_biaaq_itt_2 <- lm(f_biaaq_sum ~ b_biaaq_sum + treatment_group,  data = df_randomized_imputed)
@@ -217,6 +273,10 @@ p_value_biaaq_itt_2_robust <- lm_biaaq_itt_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_biaaq_itt_2_robust <- lm_biaaq_itt_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body-related mindfulness pre-post - EXPLORATORY
 lm_chime_itt_1 <- lm(pi_chime_sum ~ b_chime_sum + treatment_group,  data = df_randomized_imputed)
@@ -230,6 +290,10 @@ p_value_chime_itt_1_robust <- lm_chime_itt_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_chime_itt_1_robust <- lm_chime_itt_1_robust %>% 
+   tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body-related mindfulness pre-followup - EXPLORATORY
 lm_chime_itt_2 <- lm(f_chime_sum ~ b_chime_sum + treatment_group,  data = df_randomized_imputed)
@@ -243,6 +307,10 @@ p_value_chime_itt_2_robust <- lm_chime_itt_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_chime_itt_2_robust <- lm_chime_itt_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Depression symptoms pre-followup
 lm_mfq_itt <- lm(f_mfq_sum ~ b_mfq_sum + treatment_group,  data = df_randomized_imputed)
@@ -256,6 +324,10 @@ p_value_mfq_itt_robust <- lm_mfq_itt_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_mfq_itt_robust <- lm_mfq_itt_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Eating disorder symptoms pre-followup
 lm_edeq_itt <- lm(f_edeq_global ~ b_edeq_global + treatment_group,  data = df_randomized_imputed)
@@ -269,6 +341,10 @@ p_value_edeq_itt_robust <- lm_edeq_itt_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_edeq_itt_robust <- lm_edeq_itt_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Muscle dysmorphia symptoms pre-followup - EXPLORATORY
 lm_mddi_itt <- lm(f_mddi_sum ~ b_mddi_sum + treatment_group,  data = df_randomized_imputed)
@@ -282,6 +358,10 @@ p_value_mddi_itt_robust <- lm_mddi_itt_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_mddi_itt_robust <- lm_mddi_itt_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 ```
 
 ```{r primary-analysis-2-TOT}
@@ -297,6 +377,10 @@ p_value_bhs_tot_1_robust <- lm_bhs_tot_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_bhs_tot_1_robust <- lm_bhs_tot_1_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Hopelessness pre-followup
 lm_bhs_tot_2 <- lm(f_bhs_sum ~ b_bhs_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -310,6 +394,10 @@ p_value_bhs_tot_2_robust <- lm_bhs_tot_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_bhs_tot_2_robust <- lm_bhs_tot_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Agency pre-post
 lm_shs_agency_tot_1 <- lm(pi_shs_agency_sum ~ b_shs_agency_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -323,6 +411,10 @@ p_value_shs_agency_tot_1_robust <- lm_shs_agency_tot_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_shs_agency_tot_1_robust <- lm_shs_agency_tot_1_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Agency pre-followup
 lm_shs_agency_tot_2 <- lm(f_shs_agency_sum ~ b_shs_agency_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -336,6 +428,10 @@ p_value_shs_agency_tot_2_robust <- lm_shs_agency_tot_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_shs_agency_tot_2_robust <- lm_shs_agency_tot_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body image state pre-post
 lm_biss_tot_1 <- lm(pi_biss_sum ~ b_biss_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -349,6 +445,10 @@ p_value_biss_tot_1_robust <- lm_biss_tot_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_biss_tot_1_robust <- lm_biss_tot_1_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body image state pre-followup
 lm_biss_tot_2 <- lm(f_biss_sum ~ b_biss_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -362,6 +462,10 @@ p_value_biss_tot_2_robust <- lm_biss_tot_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_biss_tot_2_robust <- lm_biss_tot_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Functionality appreciation pre-post
 lm_fas_tot_1 <- lm(pi_fas_sum ~ b_fas_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -375,6 +479,10 @@ p_value_fas_tot_1_robust <- lm_fas_tot_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_fas_tot_1_robust <- lm_fas_tot_1_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Functionality appreciation pre-followup
 lm_fas_tot_2 <- lm(f_fas_sum ~ b_fas_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -388,6 +496,10 @@ p_value_fas_tot_2_robust <- lm_fas_tot_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_fas_tot_2_robust <- lm_fas_tot_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body image flexibility pre-post - EXPLORATORY
 lm_biaaq_tot_1 <- lm(pi_biaaq_sum ~ b_biaaq_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -401,6 +513,10 @@ p_value_biaaq_tot_1_robust <- lm_biaaq_tot_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_biaaq_tot_1_robust <- lm_biaaq_tot_1_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body image flexibility pre-followup - EXPLORATORY
 lm_biaaq_tot_2 <- lm(f_biaaq_sum ~ b_biaaq_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -414,6 +530,10 @@ p_value_biaaq_tot_2_robust <- lm_biaaq_tot_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_biaaq_tot_2_robust <- lm_biaaq_tot_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body-related mindfulness pre-post - EXPLORATORY
 lm_chime_tot_1 <- lm(pi_chime_sum ~ b_chime_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -427,6 +547,10 @@ p_value_chime_tot_1_robust <- lm_chime_tot_1_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_chime_tot_1_robust <- lm_chime_tot_1_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Body-related mindfulness pre-followup - EXPLORATORY
 lm_chime_tot_2 <- lm(f_chime_sum ~ b_chime_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -440,6 +564,10 @@ p_value_chime_tot_2_robust <- lm_chime_tot_2_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_chime_tot_2_robust <- lm_chime_tot_2_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Depression symptoms pre-followup
 lm_mfq_tot <- lm(f_mfq_sum ~ b_mfq_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -453,6 +581,10 @@ p_value_mfq_tot_robust <- lm_mfq_tot_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_mfq_tot_robust <- lm_mfq_tot_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Eating disorder symptoms pre-followup
 lm_edeq_tot <- lm(f_edeq_global ~ b_edeq_global + treatment_group,  data = df_completer_intervention_imputed)
@@ -466,6 +598,10 @@ p_value_edeq_tot_robust <- lm_edeq_tot_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_edeq_tot_robust <- lm_edeq_tot_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 
 #Muscle dysmorphia symptoms pre-followup - EXPLORATORY
 lm_mddi_tot <- lm(f_mddi_sum ~ b_mddi_sum + treatment_group,  data = df_completer_intervention_imputed)
@@ -479,6 +615,10 @@ p_value_mddi_tot_robust <- lm_mddi_tot_robust %>%
   tidy() %>%
   filter(term == "treatment_groupIntervention") %>%
   pull(p.value) 
+t_value_mddi_tot_robust <- lm_mddi_tot_robust %>% 
+ tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(statistic) 
 ```
 
 ```{r false-discovery-rate-corrections}
@@ -491,12 +631,7 @@ p_value_fas_itt_1_robust_adjusted <- p_value_adjustment_proximal_1_itt[3,2]
 p_value_shs_agency_itt_1_robust_adjusted <- p_value_adjustment_proximal_1_itt[4,2]
 
 #Proximal outcomes (pre to follow-up) - ITT
-p_value_adjustment_proximal_2_itt <- data.frame(p_value_original = c(p_value_bhs_itt_2_robust, p_value_biss_itt_2_robust, p_value_fas_itt_2_robust, p_value_shs_agency_itt_2_robust))
-p_value_adjustment_proximal_2_itt$p_value_adjusted <- p.adjust(p = p_value_adjustment_proximal_2_itt$p_value_original, method = "BH")
-p_value_bhs_itt_2_robust_adjusted <- p_value_adjustment_proximal_2_itt[1,2]
-p_value_biss_itt_2_robust_adjusted <- p_value_adjustment_proximal_2_itt[2,2]
-p_value_fas_itt_2_robust_adjusted <- p_value_adjustment_proximal_2_itt[3,2]
-p_value_shs_agency_itt_2_robust_adjusted <- p_value_adjustment_proximal_2_itt[4,2]
+#N/A because findings were not significant to begin with 
 
 #Proximal outcomes (pre to post) - TOT
 p_value_adjustment_proximal_1_tot <- data.frame(p_value_original = c(p_value_bhs_tot_1_robust, p_value_biss_tot_1_robust, p_value_fas_tot_1_robust, p_value_shs_agency_tot_1_robust))
@@ -515,20 +650,14 @@ p_value_fas_tot_2_robust_adjusted <- p_value_adjustment_proximal_2_tot[3,2]
 p_value_shs_agency_tot_2_robust_adjusted <- p_value_adjustment_proximal_2_tot[4,2]
 
 #Primary outcomes (pre to follow-up) - ITT
-p_value_adjustment_primary_itt <- data.frame(p_value_original = c(p_value_edeq_itt_robust, p_value_mfq_itt_robust))
-p_value_adjustment_primary_itt$p_value_adjusted <- p.adjust(p = p_value_adjustment_primary_itt$p_value_original, method = "BH")
-p_value_edeq_itt_robust_adjusted <- p_value_adjustment_primary_itt[1,2]
-p_value_mfq_itt_robust_adjusted <- p_value_adjustment_primary_itt[2,2]
+#N/A because findings were not significant to begin with 
 
 #Primary outcomes (pre to follow-up) - TOT
-p_value_adjustment_primary_tot <- data.frame(p_value_original = c(p_value_edeq_tot_robust, p_value_mfq_tot_robust))
-p_value_adjustment_primary_tot$p_value_adjusted <- p.adjust(p = p_value_adjustment_primary_tot$p_value_original, method = "BH")
-p_value_edeq_tot_robust_adjusted <- p_value_adjustment_primary_tot[1,2]
-p_value_mfq_tot_robust_adjusted <- p_value_adjustment_primary_tot[2,2]
+#N/A because findings were not significant to begin with 
 ```
 
 ```{r regression-assumptions-ITT}
-###TLDR is we decided on correcting for heteroscedasticity###
+###TLDR is we decided on correcting for heteroscedasticity with vcov above###
 
 #Check ITT pre-post
 
@@ -640,7 +769,7 @@ ols_plot_resid_qq(lm_chime_itt_2)
 ```
 
 ```{r regression-assumptions-TOT}
-###TLDR is we decided on correcting for heteroscedasticity###
+###TLDR is we decided on correcting for heteroscedasticity with vcov above###
 
 #Check TOT pre-post
 
@@ -763,7 +892,7 @@ df_randomized_imputed_control <- df_randomized_imputed %>%
 
 ##Descriptives for intervention
 bhs_stats_intervention_itt <- df_randomized_imputed_intervention %>%
-  select(b_bhs_sum,  pi_bhs_sum, f_bhs_sum) %>%
+  dplyr::select(b_bhs_sum,  pi_bhs_sum, f_bhs_sum) %>%
   mutate(bhs_sum_change_pre_post = pi_bhs_sum - b_bhs_sum,
          bhs_sum_change_pre_followup = f_bhs_sum - b_bhs_sum) %>%
   summarize(n = n(), 
@@ -771,7 +900,7 @@ bhs_stats_intervention_itt <- df_randomized_imputed_intervention %>%
 
 ##Descriptives for control
 bhs_stats_control_itt <- df_randomized_imputed_control %>%
-  select(b_bhs_sum,  pi_bhs_sum, f_bhs_sum) %>%
+  dplyr::select(b_bhs_sum,  pi_bhs_sum, f_bhs_sum) %>%
   mutate(bhs_sum_change_pre_post = pi_bhs_sum - b_bhs_sum,
          bhs_sum_change_pre_followup = f_bhs_sum - b_bhs_sum) %>%
   summarize(n = n(), 
@@ -869,7 +998,7 @@ dbetween_bhs_itt_2 <- d.ind.t(m1 = bhs_stats_intervention_itt$bhs_sum_change_pre
 
 ##Descriptives for intervention
 shs_agency_stats_intervention_itt <- df_randomized_imputed_intervention %>%
-  select(b_shs_agency_sum,  pi_shs_agency_sum, f_shs_agency_sum) %>%
+  dplyr::select(b_shs_agency_sum,  pi_shs_agency_sum, f_shs_agency_sum) %>%
   mutate(shs_agency_sum_change_pre_post = pi_shs_agency_sum - b_shs_agency_sum,
          shs_agency_sum_change_pre_followup = f_shs_agency_sum - b_shs_agency_sum) %>%
   summarize(n = n(), 
@@ -877,7 +1006,7 @@ shs_agency_stats_intervention_itt <- df_randomized_imputed_intervention %>%
 
 ##Descriptives for control
 shs_agency_stats_control_itt <- df_randomized_imputed_control  %>%
-  select(b_shs_agency_sum,  pi_shs_agency_sum, f_shs_agency_sum) %>%
+  dplyr::select(b_shs_agency_sum,  pi_shs_agency_sum, f_shs_agency_sum) %>%
   mutate(shs_agency_sum_change_pre_post = pi_shs_agency_sum - b_shs_agency_sum,
          shs_agency_sum_change_pre_followup = f_shs_agency_sum - b_shs_agency_sum) %>%
   summarize(n = n(), 
@@ -975,7 +1104,7 @@ dbetween_shs_agency_itt_2 <- d.ind.t(m1 = shs_agency_stats_intervention_itt$shs_
 
 ##Descriptives for intervention
 biss_stats_intervention_itt <- df_randomized_imputed_intervention %>%
-  select(b_biss_sum,  pi_biss_sum, f_biss_sum) %>%
+  dplyr::select(b_biss_sum,  pi_biss_sum, f_biss_sum) %>%
   mutate(biss_sum_change_pre_post = pi_biss_sum - b_biss_sum,
          biss_sum_change_pre_followup = f_biss_sum - b_biss_sum) %>%
   summarize(n = n(), 
@@ -983,7 +1112,7 @@ biss_stats_intervention_itt <- df_randomized_imputed_intervention %>%
 
 ##Descriptives for control
 biss_stats_control_itt <- df_randomized_imputed_control  %>%
-  select(b_biss_sum,  pi_biss_sum, f_biss_sum) %>%
+  dplyr::select(b_biss_sum,  pi_biss_sum, f_biss_sum) %>%
   mutate(biss_sum_change_pre_post = pi_biss_sum - b_biss_sum,
          biss_sum_change_pre_followup = f_biss_sum - b_biss_sum) %>%
   summarize(n = n(), 
@@ -1081,7 +1210,7 @@ dbetween_biss_itt_2 <- d.ind.t(m1 = biss_stats_intervention_itt$biss_sum_change_
 
 ##Descriptives for intervention
 fas_stats_intervention_itt <- df_randomized_imputed_intervention %>%
-  select(b_fas_sum,  pi_fas_sum, f_fas_sum) %>%
+  dplyr::select(b_fas_sum,  pi_fas_sum, f_fas_sum) %>%
   mutate(fas_sum_change_pre_post = pi_fas_sum - b_fas_sum,
          fas_sum_change_pre_followup = f_fas_sum - b_fas_sum) %>%
   summarize(n = n(), 
@@ -1089,7 +1218,7 @@ fas_stats_intervention_itt <- df_randomized_imputed_intervention %>%
 
 ##Descriptives for control
 fas_stats_control_itt <- df_randomized_imputed_control  %>%
-  select(b_fas_sum,  pi_fas_sum, f_fas_sum) %>%
+  dplyr::select(b_fas_sum,  pi_fas_sum, f_fas_sum) %>%
   mutate(fas_sum_change_pre_post = pi_fas_sum - b_fas_sum,
          fas_sum_change_pre_followup = f_fas_sum - b_fas_sum) %>%
   summarize(n = n(), 
@@ -1187,7 +1316,7 @@ dbetween_fas_itt_2 <- d.ind.t(m1 = fas_stats_intervention_itt$fas_sum_change_pre
 
 ##Descriptives for intervention
 biaaq_stats_intervention_itt <- df_randomized_imputed_intervention %>%
-  select(b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum) %>%
+  dplyr::select(b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum) %>%
   mutate(biaaq_sum_change_pre_post = pi_biaaq_sum - b_biaaq_sum,
          biaaq_sum_change_pre_followup = f_biaaq_sum - b_biaaq_sum) %>%
   summarize(n = n(), 
@@ -1195,7 +1324,7 @@ biaaq_stats_intervention_itt <- df_randomized_imputed_intervention %>%
 
 ##Descriptives for control
 biaaq_stats_control_itt <- df_randomized_imputed_control %>%
-  select(b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum) %>%
+  dplyr::select(b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum) %>%
   mutate(biaaq_sum_change_pre_post = pi_biaaq_sum - b_biaaq_sum,
          biaaq_sum_change_pre_followup = f_biaaq_sum - b_biaaq_sum) %>%
   summarize(n = n(), 
@@ -1293,7 +1422,7 @@ dbetween_biaaq_itt_2 <- d.ind.t(m1 = biaaq_stats_intervention_itt$biaaq_sum_chan
 
 ##Descriptives for intervention
 chime_stats_intervention_itt <- df_randomized_imputed_intervention %>%
-  select(b_chime_sum,  pi_chime_sum, f_chime_sum) %>%
+  dplyr::select(b_chime_sum,  pi_chime_sum, f_chime_sum) %>%
   mutate(chime_sum_change_pre_post = pi_chime_sum - b_chime_sum,
          chime_sum_change_pre_followup = f_chime_sum - b_chime_sum) %>%
   summarize(n = n(), 
@@ -1301,7 +1430,7 @@ chime_stats_intervention_itt <- df_randomized_imputed_intervention %>%
 
 ##Descriptives for control
 chime_stats_control_itt <- df_randomized_imputed_control %>%
-  select(b_chime_sum,  pi_chime_sum, f_chime_sum) %>%
+  dplyr::select(b_chime_sum,  pi_chime_sum, f_chime_sum) %>%
   mutate(chime_sum_change_pre_post = pi_chime_sum - b_chime_sum,
          chime_sum_change_pre_followup = f_chime_sum - b_chime_sum) %>%
   summarize(n = n(), 
@@ -1399,14 +1528,14 @@ dbetween_chime_itt_2 <- d.ind.t(m1 = chime_stats_intervention_itt$chime_sum_chan
 
 ##Descriptives for intervention
 mfq_stats_intervention_itt <- df_randomized_imputed_intervention %>%
-  select(b_mfq_sum, f_mfq_sum) %>%
+  dplyr::select(b_mfq_sum, f_mfq_sum) %>%
   mutate(mfq_sum_change_pre_followup = f_mfq_sum - b_mfq_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
 mfq_stats_control_itt <- df_randomized_imputed_control %>%
-  select(b_mfq_sum, f_mfq_sum) %>%
+  dplyr::select(b_mfq_sum, f_mfq_sum) %>%
   mutate(mfq_sum_change_pre_followup = f_mfq_sum - b_mfq_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
@@ -1459,14 +1588,14 @@ dbetween_mfq_itt <- d.ind.t(m1 = mfq_stats_intervention_itt$mfq_sum_change_pre_f
 
 ##Descriptives for intervention
 edeq_stats_intervention_itt <- df_randomized_imputed_intervention %>%
-  select(b_edeq_global, f_edeq_global) %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
 edeq_stats_control_itt <- df_randomized_imputed_control %>%
-  select(b_edeq_global, f_edeq_global) %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
@@ -1519,14 +1648,14 @@ dbetween_edeq_itt <- d.ind.t(m1 = edeq_stats_intervention_itt$edeq_global_change
 
 ##Descriptives for intervention
 mddi_stats_intervention_itt <- df_randomized_imputed_intervention %>%
-  select(b_mddi_sum, f_mddi_sum) %>%
+  dplyr::select(b_mddi_sum, f_mddi_sum) %>%
   mutate(mddi_sum_change_pre_followup = f_mddi_sum - b_mddi_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
 mddi_stats_control_itt <- df_randomized_imputed_control %>%
-  select(b_mddi_sum, f_mddi_sum) %>%
+  dplyr::select(b_mddi_sum, f_mddi_sum) %>%
   mutate(mddi_sum_change_pre_followup = f_mddi_sum - b_mddi_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
@@ -1578,25 +1707,25 @@ dbetween_mddi_itt <- d.ind.t(m1 = mddi_stats_intervention_itt$mddi_sum_change_pr
 
 ```{r effect-sizes-TOT}
 #Make new dataframes to separate Intervention and Control folks (with imputed data)
-df_completer_baseline_imputed_intervention <- df_completer_baseline_imputed %>% 
+df_completer_intervention_imputed_intervention <- df_completer_intervention_imputed %>% 
   filter(treatment_group == "Intervention")
 
-df_completer_baseline_imputed_control <- df_completer_baseline_imputed %>% 
+df_completer_intervention_imputed_control <- df_completer_intervention_imputed %>% 
   filter(treatment_group == "Control")
 
 #Hopelessness descriptives
 
 ##Descriptives for intervention
-bhs_stats_intervention_tot <- df_completer_baseline_imputed_intervention %>%
-  select(b_bhs_sum,  pi_bhs_sum, f_bhs_sum) %>%
+bhs_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_bhs_sum,  pi_bhs_sum, f_bhs_sum) %>%
   mutate(bhs_sum_change_pre_post = pi_bhs_sum - b_bhs_sum,
          bhs_sum_change_pre_followup = f_bhs_sum - b_bhs_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
-bhs_stats_control_tot <- df_completer_baseline_imputed_control %>%
-  select(b_bhs_sum,  pi_bhs_sum, f_bhs_sum) %>%
+bhs_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_bhs_sum,  pi_bhs_sum, f_bhs_sum) %>%
   mutate(bhs_sum_change_pre_post = pi_bhs_sum - b_bhs_sum,
          bhs_sum_change_pre_followup = f_bhs_sum - b_bhs_sum) %>%
   summarize(n = n(), 
@@ -1693,16 +1822,16 @@ dbetween_bhs_tot_2 <- d.ind.t(m1 = bhs_stats_intervention_tot$bhs_sum_change_pre
 #Agency descriptives
 
 ##Descriptives for intervention
-shs_agency_stats_intervention_tot <- df_completer_baseline_imputed_intervention %>%
-  select(b_shs_agency_sum,  pi_shs_agency_sum, f_shs_agency_sum) %>%
+shs_agency_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_shs_agency_sum,  pi_shs_agency_sum, f_shs_agency_sum) %>%
   mutate(shs_agency_sum_change_pre_post = pi_shs_agency_sum - b_shs_agency_sum,
          shs_agency_sum_change_pre_followup = f_shs_agency_sum - b_shs_agency_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
-shs_agency_stats_control_tot <- df_completer_baseline_imputed_control %>%
-  select(b_shs_agency_sum,  pi_shs_agency_sum, f_shs_agency_sum) %>%
+shs_agency_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_shs_agency_sum,  pi_shs_agency_sum, f_shs_agency_sum) %>%
   mutate(shs_agency_sum_change_pre_post = pi_shs_agency_sum - b_shs_agency_sum,
          shs_agency_sum_change_pre_followup = f_shs_agency_sum - b_shs_agency_sum) %>%
   summarize(n = n(), 
@@ -1799,16 +1928,16 @@ dbetween_shs_agency_tot_2 <- d.ind.t(m1 = shs_agency_stats_intervention_tot$shs_
 #Body image state descriptives
 
 ##Descriptives for intervention
-biss_stats_intervention_tot <- df_completer_baseline_imputed_intervention %>%
-  select(b_biss_sum,  pi_biss_sum, f_biss_sum) %>%
+biss_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_biss_sum,  pi_biss_sum, f_biss_sum) %>%
   mutate(biss_sum_change_pre_post = pi_biss_sum - b_biss_sum,
          biss_sum_change_pre_followup = f_biss_sum - b_biss_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
-biss_stats_control_tot <- df_completer_baseline_imputed_control %>%
-  select(b_biss_sum,  pi_biss_sum, f_biss_sum) %>%
+biss_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_biss_sum,  pi_biss_sum, f_biss_sum) %>%
   mutate(biss_sum_change_pre_post = pi_biss_sum - b_biss_sum,
          biss_sum_change_pre_followup = f_biss_sum - b_biss_sum) %>%
   summarize(n = n(), 
@@ -1905,16 +2034,16 @@ dbetween_biss_tot_2 <- d.ind.t(m1 = biss_stats_intervention_tot$biss_sum_change_
 #Functionality appreciation descriptives
 
 ##Descriptives for intervention
-fas_stats_intervention_tot <- df_completer_baseline_imputed_intervention %>%
-  select(b_fas_sum,  pi_fas_sum, f_fas_sum) %>%
+fas_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_fas_sum,  pi_fas_sum, f_fas_sum) %>%
   mutate(fas_sum_change_pre_post = pi_fas_sum - b_fas_sum,
          fas_sum_change_pre_followup = f_fas_sum - b_fas_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
-fas_stats_control_tot <- df_completer_baseline_imputed_control %>%
-  select(b_fas_sum,  pi_fas_sum, f_fas_sum) %>%
+fas_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_fas_sum,  pi_fas_sum, f_fas_sum) %>%
   mutate(fas_sum_change_pre_post = pi_fas_sum - b_fas_sum,
          fas_sum_change_pre_followup = f_fas_sum - b_fas_sum) %>%
   summarize(n = n(), 
@@ -2011,16 +2140,16 @@ dbetween_fas_tot_2 <- d.ind.t(m1 = fas_stats_intervention_tot$fas_sum_change_pre
 #Body image flexibility descriptives
 
 ##Descriptives for intervention
-biaaq_stats_intervention_tot <- df_completer_baseline_imputed_intervention %>%
-  select(b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum) %>%
+biaaq_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum) %>%
   mutate(biaaq_sum_change_pre_post = pi_biaaq_sum - b_biaaq_sum,
          biaaq_sum_change_pre_followup = f_biaaq_sum - b_biaaq_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
-biaaq_stats_control_tot <- df_completer_baseline_imputed_control %>%
-  select(b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum) %>%
+biaaq_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_biaaq_sum,  pi_biaaq_sum, f_biaaq_sum) %>%
   mutate(biaaq_sum_change_pre_post = pi_biaaq_sum - b_biaaq_sum,
          biaaq_sum_change_pre_followup = f_biaaq_sum - b_biaaq_sum) %>%
   summarize(n = n(), 
@@ -2117,16 +2246,16 @@ dbetween_biaaq_tot_2 <- d.ind.t(m1 = biaaq_stats_intervention_tot$biaaq_sum_chan
 #Body-related mindfulness descriptives
 
 ##Descriptives for intervention
-chime_stats_intervention_tot <- df_completer_baseline_imputed_intervention %>%
-  select(b_chime_sum,  pi_chime_sum, f_chime_sum) %>%
+chime_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_chime_sum,  pi_chime_sum, f_chime_sum) %>%
   mutate(chime_sum_change_pre_post = pi_chime_sum - b_chime_sum,
          chime_sum_change_pre_followup = f_chime_sum - b_chime_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
-chime_stats_control_tot <- df_completer_baseline_imputed_control %>%
-  select(b_chime_sum,  pi_chime_sum, f_chime_sum) %>%
+chime_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_chime_sum,  pi_chime_sum, f_chime_sum) %>%
   mutate(chime_sum_change_pre_post = pi_chime_sum - b_chime_sum,
          chime_sum_change_pre_followup = f_chime_sum - b_chime_sum) %>%
   summarize(n = n(), 
@@ -2223,15 +2352,15 @@ dbetween_chime_tot_2 <- d.ind.t(m1 = chime_stats_intervention_tot$chime_sum_chan
 #Depression symptoms descriptives
 
 ##Descriptives for intervention
-mfq_stats_intervention_tot <- df_completer_baseline_imputed_intervention %>%
-  select(b_mfq_sum, f_mfq_sum) %>%
+mfq_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_mfq_sum, f_mfq_sum) %>%
   mutate(mfq_sum_change_pre_followup = f_mfq_sum - b_mfq_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
-mfq_stats_control_tot <- df_completer_baseline_imputed_control %>%
-  select(b_mfq_sum, f_mfq_sum) %>%
+mfq_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_mfq_sum, f_mfq_sum) %>%
   mutate(mfq_sum_change_pre_followup = f_mfq_sum - b_mfq_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
@@ -2283,15 +2412,15 @@ dbetween_mfq_tot <- d.ind.t(m1 = mfq_stats_intervention_tot$mfq_sum_change_pre_f
 #Eating disorder symptoms descriptives
 
 ##Descriptives for intervention
-edeq_stats_intervention_tot <- df_completer_baseline_imputed_intervention %>%
-  select(b_edeq_global, f_edeq_global) %>%
+edeq_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
-edeq_stats_control_tot <- df_completer_baseline_imputed_control %>%
-  select(b_edeq_global, f_edeq_global) %>%
+edeq_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
@@ -2343,15 +2472,15 @@ dbetween_edeq_tot <- d.ind.t(m1 = edeq_stats_intervention_tot$edeq_global_change
 #Muscle dysmorphia symptoms descriptives
 
 ##Descriptives for intervention
-mddi_stats_intervention_tot <- df_completer_baseline_imputed_intervention %>%
-  select(b_mddi_sum, f_mddi_sum) %>%
+mddi_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_mddi_sum, f_mddi_sum) %>%
   mutate(mddi_sum_change_pre_followup = f_mddi_sum - b_mddi_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ##Descriptives for control
-mddi_stats_control_tot <- df_completer_baseline_imputed_control %>%
-  select(b_mddi_sum, f_mddi_sum) %>%
+mddi_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_mddi_sum, f_mddi_sum) %>%
   mutate(mddi_sum_change_pre_followup = f_mddi_sum - b_mddi_sum) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
@@ -2401,12 +2530,441 @@ dbetween_mddi_tot <- d.ind.t(m1 = mddi_stats_intervention_tot$mddi_sum_change_pr
   pluck("estimate")
 ```
 
+```{r analyses for EDE-Q subscales}
+#Dietary restraint - ITT
+
+##Regression
+lm_edeq_dietary_restraint_itt <- lm(f_edeq_dietary_restraint ~ b_edeq_dietary_restraint + treatment_group,  data = df_randomized_imputed)
+tidy(lm_edeq_dietary_restraint_itt, conf.int = T) 
+lm_edeq_dietary_restraint_itt_robust <- coeftest(
+  x = lm_edeq_dietary_restraint_itt,
+  vcov = vcovHC(lm_edeq_dietary_restraint_itt, type = "HC0")
+)
+tidy(lm_edeq_dietary_restraint_itt_robust, conf.int = T) 
+p_value_edeq_dietary_restraint_itt_robust <- lm_edeq_dietary_restraint_itt_robust %>% 
+  tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(p.value) 
+
+##Descriptives for intervention
+edeq_dietary_restraint_stats_intervention_itt <- df_randomized_imputed_intervention %>%
+  dplyr::select(b_edeq_dietary_restraint, f_edeq_dietary_restraint) %>%
+  mutate(edeq_dietary_restraint_change_pre_followup = f_edeq_dietary_restraint - b_edeq_dietary_restraint) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##Descriptives for control
+edeq_dietary_restraint_stats_control_itt <- df_randomized_imputed_control %>%
+  dplyr::select(b_edeq_dietary_restraint, f_edeq_dietary_restraint) %>%
+  mutate(edeq_dietary_restraint_change_pre_followup = f_edeq_dietary_restraint - b_edeq_dietary_restraint) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##within-person d(av) for intervention
+dav_intervention_edeq_dietary_restraint_itt <- d.dep.t.avg(m1 = edeq_dietary_restraint_stats_intervention_itt$b_edeq_dietary_restraint_mean, 
+            m2 = edeq_dietary_restraint_stats_intervention_itt$f_edeq_dietary_restraint_mean, 
+            sd1 = edeq_dietary_restraint_stats_intervention_itt$b_edeq_dietary_restraint_sd, 
+            sd2 = edeq_dietary_restraint_stats_intervention_itt$f_edeq_dietary_restraint_sd, 
+            n = edeq_dietary_restraint_stats_intervention_itt$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(av) for control
+dav_control_edeq_dietary_restraint_itt <- d.dep.t.avg(m1 = edeq_dietary_restraint_stats_control_itt$b_edeq_dietary_restraint_mean, 
+            m2 = edeq_dietary_restraint_stats_control_itt$f_edeq_dietary_restraint_mean, 
+            sd1 = edeq_dietary_restraint_stats_control_itt$b_edeq_dietary_restraint_sd, 
+            sd2 = edeq_dietary_restraint_stats_control_itt$f_edeq_dietary_restraint_sd, 
+            n = edeq_dietary_restraint_stats_control_itt$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for intervention
+dz_intervention_edeq_dietary_restraint_itt <- d.dep.t.diff(mdiff = edeq_dietary_restraint_stats_intervention_itt$edeq_dietary_restraint_change_pre_followup_mean,
+             sddiff = edeq_dietary_restraint_stats_intervention_itt$edeq_dietary_restraint_change_pre_followup_sd,
+             n = edeq_dietary_restraint_stats_intervention_itt$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for control
+dz_control_edeq_dietary_restraint_itt <- d.dep.t.diff(mdiff = edeq_dietary_restraint_stats_control_itt$edeq_dietary_restraint_change_pre_followup_mean,
+             sddiff = edeq_dietary_restraint_stats_control_itt$edeq_dietary_restraint_change_pre_followup_sd,
+             n = edeq_dietary_restraint_stats_control_itt$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##between-group d
+dbetween_edeq_dietary_restraint_itt <- d.ind.t(m1 = edeq_dietary_restraint_stats_intervention_itt$edeq_dietary_restraint_change_pre_followup_mean,  
+        m2 = edeq_dietary_restraint_stats_control_itt$edeq_dietary_restraint_change_pre_followup_mean,  
+        sd1 = edeq_dietary_restraint_stats_intervention_itt$edeq_dietary_restraint_change_pre_followup_sd,  
+        sd2 = edeq_dietary_restraint_stats_control_itt$edeq_dietary_restraint_change_pre_followup_sd,  
+        n1 = edeq_dietary_restraint_stats_intervention_itt$n,  
+        n2 = edeq_dietary_restraint_stats_control_itt$n,  
+        a = 0.05) %>%
+  pluck("estimate")
+
+#Preoccupation and Eating Concern - ITT
+
+##Regression
+lm_edeq_preoccupation_eatingconcern_itt <- lm(f_edeq_preoccupation_eatingconcern ~ b_edeq_preoccupation_eatingconcern + treatment_group,  data = df_randomized_imputed)
+tidy(lm_edeq_preoccupation_eatingconcern_itt, conf.int = T) 
+lm_edeq_preoccupation_eatingconcern_itt_robust <- coeftest(
+  x = lm_edeq_preoccupation_eatingconcern_itt,
+  vcov = vcovHC(lm_edeq_preoccupation_eatingconcern_itt, type = "HC0")
+)
+tidy(lm_edeq_preoccupation_eatingconcern_itt_robust, conf.int = T) 
+p_value_edeq_preoccupation_eatingconcern_itt_robust <- lm_edeq_preoccupation_eatingconcern_itt_robust %>% 
+  tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(p.value) 
+
+##Descriptives for intervention
+edeq_preoccupation_eatingconcern_stats_intervention_itt <- df_randomized_imputed_intervention %>%
+  dplyr::select(b_edeq_preoccupation_eatingconcern, f_edeq_preoccupation_eatingconcern) %>%
+  mutate(edeq_preoccupation_eatingconcern_change_pre_followup = f_edeq_preoccupation_eatingconcern - b_edeq_preoccupation_eatingconcern) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##Descriptives for control
+edeq_preoccupation_eatingconcern_stats_control_itt <- df_randomized_imputed_control %>%
+  dplyr::select(b_edeq_preoccupation_eatingconcern, f_edeq_preoccupation_eatingconcern) %>%
+  mutate(edeq_preoccupation_eatingconcern_change_pre_followup = f_edeq_preoccupation_eatingconcern - b_edeq_preoccupation_eatingconcern) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##within-person d(av) for intervention
+dav_intervention_edeq_preoccupation_eatingconcern_itt <- d.dep.t.avg(m1 = edeq_preoccupation_eatingconcern_stats_intervention_itt$b_edeq_preoccupation_eatingconcern_mean, 
+            m2 = edeq_preoccupation_eatingconcern_stats_intervention_itt$f_edeq_preoccupation_eatingconcern_mean, 
+            sd1 = edeq_preoccupation_eatingconcern_stats_intervention_itt$b_edeq_preoccupation_eatingconcern_sd, 
+            sd2 = edeq_preoccupation_eatingconcern_stats_intervention_itt$f_edeq_preoccupation_eatingconcern_sd, 
+            n = edeq_preoccupation_eatingconcern_stats_intervention_itt$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(av) for control
+dav_control_edeq_preoccupation_eatingconcern_itt <- d.dep.t.avg(m1 = edeq_preoccupation_eatingconcern_stats_control_itt$b_edeq_preoccupation_eatingconcern_mean, 
+            m2 = edeq_preoccupation_eatingconcern_stats_control_itt$f_edeq_preoccupation_eatingconcern_mean, 
+            sd1 = edeq_preoccupation_eatingconcern_stats_control_itt$b_edeq_preoccupation_eatingconcern_sd, 
+            sd2 = edeq_preoccupation_eatingconcern_stats_control_itt$f_edeq_preoccupation_eatingconcern_sd, 
+            n = edeq_preoccupation_eatingconcern_stats_control_itt$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for intervention
+dz_intervention_edeq_preoccupation_eatingconcern_itt <- d.dep.t.diff(mdiff = edeq_preoccupation_eatingconcern_stats_intervention_itt$edeq_preoccupation_eatingconcern_change_pre_followup_mean,
+             sddiff = edeq_preoccupation_eatingconcern_stats_intervention_itt$edeq_preoccupation_eatingconcern_change_pre_followup_sd,
+             n = edeq_preoccupation_eatingconcern_stats_intervention_itt$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for control
+dz_control_edeq_preoccupation_eatingconcern_itt <- d.dep.t.diff(mdiff = edeq_preoccupation_eatingconcern_stats_control_itt$edeq_preoccupation_eatingconcern_change_pre_followup_mean,
+             sddiff = edeq_preoccupation_eatingconcern_stats_control_itt$edeq_preoccupation_eatingconcern_change_pre_followup_sd,
+             n = edeq_preoccupation_eatingconcern_stats_control_itt$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##between-group d
+dbetween_edeq_preoccupation_eatingconcern_itt <- d.ind.t(m1 = edeq_preoccupation_eatingconcern_stats_intervention_itt$edeq_preoccupation_eatingconcern_change_pre_followup_mean,  
+        m2 = edeq_preoccupation_eatingconcern_stats_control_itt$edeq_preoccupation_eatingconcern_change_pre_followup_mean,  
+        sd1 = edeq_preoccupation_eatingconcern_stats_intervention_itt$edeq_preoccupation_eatingconcern_change_pre_followup_sd,  
+        sd2 = edeq_preoccupation_eatingconcern_stats_control_itt$edeq_preoccupation_eatingconcern_change_pre_followup_sd,  
+        n1 = edeq_preoccupation_eatingconcern_stats_intervention_itt$n,  
+        n2 = edeq_preoccupation_eatingconcern_stats_control_itt$n,  
+        a = 0.05) %>%
+  pluck("estimate")
+
+#Overvaluation of weight and shape - ITT
+
+##Regression
+lm_edeq_overvaluation_itt <- lm(f_edeq_overvaluation ~ b_edeq_overvaluation + treatment_group,  data = df_randomized_imputed)
+tidy(lm_edeq_overvaluation_itt, conf.int = T) 
+lm_edeq_overvaluation_itt_robust <- coeftest(
+  x = lm_edeq_overvaluation_itt,
+  vcov = vcovHC(lm_edeq_overvaluation_itt, type = "HC0")
+)
+tidy(lm_edeq_overvaluation_itt_robust, conf.int = T) 
+p_value_edeq_overvaluation_itt_robust <- lm_edeq_overvaluation_itt_robust %>% 
+  tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(p.value) 
+
+##Descriptives for intervention
+edeq_overvaluation_stats_intervention_itt <- df_randomized_imputed_intervention %>%
+  dplyr::select(b_edeq_overvaluation, f_edeq_overvaluation) %>%
+  mutate(edeq_overvaluation_change_pre_followup = f_edeq_overvaluation - b_edeq_overvaluation) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##Descriptives for control
+edeq_overvaluation_stats_control_itt <- df_randomized_imputed_control %>%
+  dplyr::select(b_edeq_overvaluation, f_edeq_overvaluation) %>%
+  mutate(edeq_overvaluation_change_pre_followup = f_edeq_overvaluation - b_edeq_overvaluation) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##within-person d(av) for intervention
+dav_intervention_edeq_overvaluation_itt <- d.dep.t.avg(m1 = edeq_overvaluation_stats_intervention_itt$b_edeq_overvaluation_mean, 
+            m2 = edeq_overvaluation_stats_intervention_itt$f_edeq_overvaluation_mean, 
+            sd1 = edeq_overvaluation_stats_intervention_itt$b_edeq_overvaluation_sd, 
+            sd2 = edeq_overvaluation_stats_intervention_itt$f_edeq_overvaluation_sd, 
+            n = edeq_overvaluation_stats_intervention_itt$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(av) for control
+dav_control_edeq_overvaluation_itt <- d.dep.t.avg(m1 = edeq_overvaluation_stats_control_itt$b_edeq_overvaluation_mean, 
+            m2 = edeq_overvaluation_stats_control_itt$f_edeq_overvaluation_mean, 
+            sd1 = edeq_overvaluation_stats_control_itt$b_edeq_overvaluation_sd, 
+            sd2 = edeq_overvaluation_stats_control_itt$f_edeq_overvaluation_sd, 
+            n = edeq_overvaluation_stats_control_itt$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for intervention
+dz_intervention_edeq_overvaluation_itt <- d.dep.t.diff(mdiff = edeq_overvaluation_stats_intervention_itt$edeq_overvaluation_change_pre_followup_mean,
+             sddiff = edeq_overvaluation_stats_intervention_itt$edeq_overvaluation_change_pre_followup_sd,
+             n = edeq_overvaluation_stats_intervention_itt$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for control
+dz_control_edeq_overvaluation_itt <- d.dep.t.diff(mdiff = edeq_overvaluation_stats_control_itt$edeq_overvaluation_change_pre_followup_mean,
+             sddiff = edeq_overvaluation_stats_control_itt$edeq_overvaluation_change_pre_followup_sd,
+             n = edeq_overvaluation_stats_control_itt$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##between-group d
+dbetween_edeq_overvaluation_itt <- d.ind.t(m1 = edeq_overvaluation_stats_intervention_itt$edeq_overvaluation_change_pre_followup_mean,  
+        m2 = edeq_overvaluation_stats_control_itt$edeq_overvaluation_change_pre_followup_mean,  
+        sd1 = edeq_overvaluation_stats_intervention_itt$edeq_overvaluation_change_pre_followup_sd,  
+        sd2 = edeq_overvaluation_stats_control_itt$edeq_overvaluation_change_pre_followup_sd,  
+        n1 = edeq_overvaluation_stats_intervention_itt$n,  
+        n2 = edeq_overvaluation_stats_control_itt$n,  
+        a = 0.05) %>%
+  pluck("estimate")
+
+#Dietary restraint - TOT
+
+##Regression
+lm_edeq_dietary_restraint_tot <- lm(f_edeq_dietary_restraint ~ b_edeq_dietary_restraint + treatment_group,  data = df_completer_intervention_imputed)
+tidy(lm_edeq_dietary_restraint_tot, conf.int = T) 
+lm_edeq_dietary_restraint_tot_robust <- coeftest(
+  x = lm_edeq_dietary_restraint_tot,
+  vcov = vcovHC(lm_edeq_dietary_restraint_tot, type = "HC0")
+)
+tidy(lm_edeq_dietary_restraint_tot_robust, conf.int = T) 
+p_value_edeq_dietary_restraint_tot_robust <- lm_edeq_dietary_restraint_tot_robust %>% 
+  tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(p.value) 
+
+##Descriptives for intervention
+edeq_dietary_restraint_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_edeq_dietary_restraint, f_edeq_dietary_restraint) %>%
+  mutate(edeq_dietary_restraint_change_pre_followup = f_edeq_dietary_restraint - b_edeq_dietary_restraint) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##Descriptives for control
+edeq_dietary_restraint_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_edeq_dietary_restraint, f_edeq_dietary_restraint) %>%
+  mutate(edeq_dietary_restraint_change_pre_followup = f_edeq_dietary_restraint - b_edeq_dietary_restraint) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##within-person d(av) for intervention
+dav_intervention_edeq_dietary_restraint_tot <- d.dep.t.avg(m1 = edeq_dietary_restraint_stats_intervention_tot$b_edeq_dietary_restraint_mean, 
+            m2 = edeq_dietary_restraint_stats_intervention_tot$f_edeq_dietary_restraint_mean, 
+            sd1 = edeq_dietary_restraint_stats_intervention_tot$b_edeq_dietary_restraint_sd, 
+            sd2 = edeq_dietary_restraint_stats_intervention_tot$f_edeq_dietary_restraint_sd, 
+            n = edeq_dietary_restraint_stats_intervention_tot$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(av) for control
+dav_control_edeq_dietary_restraint_tot <- d.dep.t.avg(m1 = edeq_dietary_restraint_stats_control_tot$b_edeq_dietary_restraint_mean, 
+            m2 = edeq_dietary_restraint_stats_control_tot$f_edeq_dietary_restraint_mean, 
+            sd1 = edeq_dietary_restraint_stats_control_tot$b_edeq_dietary_restraint_sd, 
+            sd2 = edeq_dietary_restraint_stats_control_tot$f_edeq_dietary_restraint_sd, 
+            n = edeq_dietary_restraint_stats_control_tot$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for intervention
+dz_intervention_edeq_dietary_restraint_tot <- d.dep.t.diff(mdiff = edeq_dietary_restraint_stats_intervention_tot$edeq_dietary_restraint_change_pre_followup_mean,
+             sddiff = edeq_dietary_restraint_stats_intervention_tot$edeq_dietary_restraint_change_pre_followup_sd,
+             n = edeq_dietary_restraint_stats_intervention_tot$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for control
+dz_control_edeq_dietary_restraint_tot <- d.dep.t.diff(mdiff = edeq_dietary_restraint_stats_control_tot$edeq_dietary_restraint_change_pre_followup_mean,
+             sddiff = edeq_dietary_restraint_stats_control_tot$edeq_dietary_restraint_change_pre_followup_sd,
+             n = edeq_dietary_restraint_stats_control_tot$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##between-group d
+dbetween_edeq_dietary_restraint_tot <- d.ind.t(m1 = edeq_dietary_restraint_stats_intervention_tot$edeq_dietary_restraint_change_pre_followup_mean,  
+        m2 = edeq_dietary_restraint_stats_control_tot$edeq_dietary_restraint_change_pre_followup_mean,  
+        sd1 = edeq_dietary_restraint_stats_intervention_tot$edeq_dietary_restraint_change_pre_followup_sd,  
+        sd2 = edeq_dietary_restraint_stats_control_tot$edeq_dietary_restraint_change_pre_followup_sd,  
+        n1 = edeq_dietary_restraint_stats_intervention_tot$n,  
+        n2 = edeq_dietary_restraint_stats_control_tot$n,  
+        a = 0.05) %>%
+  pluck("estimate")
+
+#Preoccupation and Eating Concern - TOT
+
+##Regression
+lm_edeq_preoccupation_eatingconcern_tot <- lm(f_edeq_preoccupation_eatingconcern ~ b_edeq_preoccupation_eatingconcern + treatment_group,  data = df_completer_intervention_imputed)
+tidy(lm_edeq_preoccupation_eatingconcern_tot, conf.int = T) 
+lm_edeq_preoccupation_eatingconcern_tot_robust <- coeftest(
+  x = lm_edeq_preoccupation_eatingconcern_tot,
+  vcov = vcovHC(lm_edeq_preoccupation_eatingconcern_tot, type = "HC0")
+)
+tidy(lm_edeq_preoccupation_eatingconcern_tot_robust, conf.int = T) 
+p_value_edeq_preoccupation_eatingconcern_tot_robust <- lm_edeq_preoccupation_eatingconcern_tot_robust %>% 
+  tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(p.value) 
+
+##Descriptives for intervention
+edeq_preoccupation_eatingconcern_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_edeq_preoccupation_eatingconcern, f_edeq_preoccupation_eatingconcern) %>%
+  mutate(edeq_preoccupation_eatingconcern_change_pre_followup = f_edeq_preoccupation_eatingconcern - b_edeq_preoccupation_eatingconcern) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##Descriptives for control
+edeq_preoccupation_eatingconcern_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_edeq_preoccupation_eatingconcern, f_edeq_preoccupation_eatingconcern) %>%
+  mutate(edeq_preoccupation_eatingconcern_change_pre_followup = f_edeq_preoccupation_eatingconcern - b_edeq_preoccupation_eatingconcern) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##within-person d(av) for intervention
+dav_intervention_edeq_preoccupation_eatingconcern_tot <- d.dep.t.avg(m1 = edeq_preoccupation_eatingconcern_stats_intervention_tot$b_edeq_preoccupation_eatingconcern_mean, 
+            m2 = edeq_preoccupation_eatingconcern_stats_intervention_tot$f_edeq_preoccupation_eatingconcern_mean, 
+            sd1 = edeq_preoccupation_eatingconcern_stats_intervention_tot$b_edeq_preoccupation_eatingconcern_sd, 
+            sd2 = edeq_preoccupation_eatingconcern_stats_intervention_tot$f_edeq_preoccupation_eatingconcern_sd, 
+            n = edeq_preoccupation_eatingconcern_stats_intervention_tot$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(av) for control
+dav_control_edeq_preoccupation_eatingconcern_tot <- d.dep.t.avg(m1 = edeq_preoccupation_eatingconcern_stats_control_tot$b_edeq_preoccupation_eatingconcern_mean, 
+            m2 = edeq_preoccupation_eatingconcern_stats_control_tot$f_edeq_preoccupation_eatingconcern_mean, 
+            sd1 = edeq_preoccupation_eatingconcern_stats_control_tot$b_edeq_preoccupation_eatingconcern_sd, 
+            sd2 = edeq_preoccupation_eatingconcern_stats_control_tot$f_edeq_preoccupation_eatingconcern_sd, 
+            n = edeq_preoccupation_eatingconcern_stats_control_tot$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for intervention
+dz_intervention_edeq_preoccupation_eatingconcern_tot <- d.dep.t.diff(mdiff = edeq_preoccupation_eatingconcern_stats_intervention_tot$edeq_preoccupation_eatingconcern_change_pre_followup_mean,
+             sddiff = edeq_preoccupation_eatingconcern_stats_intervention_tot$edeq_preoccupation_eatingconcern_change_pre_followup_sd,
+             n = edeq_preoccupation_eatingconcern_stats_intervention_tot$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for control
+dz_control_edeq_preoccupation_eatingconcern_tot <- d.dep.t.diff(mdiff = edeq_preoccupation_eatingconcern_stats_control_tot$edeq_preoccupation_eatingconcern_change_pre_followup_mean,
+             sddiff = edeq_preoccupation_eatingconcern_stats_control_tot$edeq_preoccupation_eatingconcern_change_pre_followup_sd,
+             n = edeq_preoccupation_eatingconcern_stats_control_tot$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##between-group d
+dbetween_edeq_preoccupation_eatingconcern_tot <- d.ind.t(m1 = edeq_preoccupation_eatingconcern_stats_intervention_tot$edeq_preoccupation_eatingconcern_change_pre_followup_mean,  
+        m2 = edeq_preoccupation_eatingconcern_stats_control_tot$edeq_preoccupation_eatingconcern_change_pre_followup_mean,  
+        sd1 = edeq_preoccupation_eatingconcern_stats_intervention_tot$edeq_preoccupation_eatingconcern_change_pre_followup_sd,  
+        sd2 = edeq_preoccupation_eatingconcern_stats_control_tot$edeq_preoccupation_eatingconcern_change_pre_followup_sd,  
+        n1 = edeq_preoccupation_eatingconcern_stats_intervention_tot$n,  
+        n2 = edeq_preoccupation_eatingconcern_stats_control_tot$n,  
+        a = 0.05) %>%
+  pluck("estimate")
+
+#Overvaluation of weight and shape - TOT
+
+##Regression
+lm_edeq_overvaluation_tot <- lm(f_edeq_overvaluation ~ b_edeq_overvaluation + treatment_group,  data = df_completer_intervention_imputed)
+tidy(lm_edeq_overvaluation_tot, conf.int = T) 
+lm_edeq_overvaluation_tot_robust <- coeftest(
+  x = lm_edeq_overvaluation_tot,
+  vcov = vcovHC(lm_edeq_overvaluation_tot, type = "HC0")
+)
+tidy(lm_edeq_overvaluation_tot_robust, conf.int = T) 
+p_value_edeq_overvaluation_tot_robust <- lm_edeq_overvaluation_tot_robust %>% 
+  tidy() %>%
+  filter(term == "treatment_groupIntervention") %>%
+  pull(p.value) 
+
+##Descriptives for intervention
+edeq_overvaluation_stats_intervention_tot <- df_completer_intervention_imputed_intervention %>%
+  dplyr::select(b_edeq_overvaluation, f_edeq_overvaluation) %>%
+  mutate(edeq_overvaluation_change_pre_followup = f_edeq_overvaluation - b_edeq_overvaluation) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##Descriptives for control
+edeq_overvaluation_stats_control_tot <- df_completer_intervention_imputed_control %>%
+  dplyr::select(b_edeq_overvaluation, f_edeq_overvaluation) %>%
+  mutate(edeq_overvaluation_change_pre_followup = f_edeq_overvaluation - b_edeq_overvaluation) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+##within-person d(av) for intervention
+dav_intervention_edeq_overvaluation_tot <- d.dep.t.avg(m1 = edeq_overvaluation_stats_intervention_tot$b_edeq_overvaluation_mean, 
+            m2 = edeq_overvaluation_stats_intervention_tot$f_edeq_overvaluation_mean, 
+            sd1 = edeq_overvaluation_stats_intervention_tot$b_edeq_overvaluation_sd, 
+            sd2 = edeq_overvaluation_stats_intervention_tot$f_edeq_overvaluation_sd, 
+            n = edeq_overvaluation_stats_intervention_tot$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(av) for control
+dav_control_edeq_overvaluation_tot <- d.dep.t.avg(m1 = edeq_overvaluation_stats_control_tot$b_edeq_overvaluation_mean, 
+            m2 = edeq_overvaluation_stats_control_tot$f_edeq_overvaluation_mean, 
+            sd1 = edeq_overvaluation_stats_control_tot$b_edeq_overvaluation_sd, 
+            sd2 = edeq_overvaluation_stats_control_tot$f_edeq_overvaluation_sd, 
+            n = edeq_overvaluation_stats_control_tot$n, 
+            a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for intervention
+dz_intervention_edeq_overvaluation_tot <- d.dep.t.diff(mdiff = edeq_overvaluation_stats_intervention_tot$edeq_overvaluation_change_pre_followup_mean,
+             sddiff = edeq_overvaluation_stats_intervention_tot$edeq_overvaluation_change_pre_followup_sd,
+             n = edeq_overvaluation_stats_intervention_tot$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##within-person d(z) for control
+dz_control_edeq_overvaluation_tot <- d.dep.t.diff(mdiff = edeq_overvaluation_stats_control_tot$edeq_overvaluation_change_pre_followup_mean,
+             sddiff = edeq_overvaluation_stats_control_tot$edeq_overvaluation_change_pre_followup_sd,
+             n = edeq_overvaluation_stats_control_tot$n,
+             a = .05) %>%
+  pluck("estimate")
+
+##between-group d
+dbetween_edeq_overvaluation_tot <- d.ind.t(m1 = edeq_overvaluation_stats_intervention_tot$edeq_overvaluation_change_pre_followup_mean,  
+        m2 = edeq_overvaluation_stats_control_tot$edeq_overvaluation_change_pre_followup_mean,  
+        sd1 = edeq_overvaluation_stats_intervention_tot$edeq_overvaluation_change_pre_followup_sd,  
+        sd2 = edeq_overvaluation_stats_control_tot$edeq_overvaluation_change_pre_followup_sd,  
+        n1 = edeq_overvaluation_stats_intervention_tot$n,  
+        n2 = edeq_overvaluation_stats_control_tot$n,  
+        a = 0.05) %>%
+  pluck("estimate")
+```
+
 ```{r create-tables-for-outcomes}
 #Hopelessness
 bhs_itt_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_bhs_itt_1_robust, t_value_bhs_itt_2_robust),
   `p-Value-Original` = c(p_value_bhs_itt_1_robust, p_value_bhs_itt_2_robust),
-  `p-Value-Adjusted` = c(p_value_bhs_itt_1_robust_adjusted, p_value_bhs_itt_2_robust_adjusted),
+  `p-Value-Adjusted` = c(p_value_bhs_itt_1_robust_adjusted, "NA"),
   `d Between Groups` = c(dbetween_bhs_itt_1, dbetween_bhs_itt_2),
   `d.av Intervention` = c(dav_intervention_bhs_itt_1, dav_intervention_bhs_itt_2),
   `d.av Control` = c(dav_control_bhs_itt_1, dav_control_bhs_itt_2),
@@ -2415,6 +2973,7 @@ bhs_itt_table <- data.frame(
 bhs_itt_table
 bhs_tot_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_bhs_tot_1_robust, t_value_bhs_tot_2_robust),
   `p-Value-Original` = c(p_value_bhs_tot_1_robust, p_value_bhs_tot_2_robust),
   `p-Value-Adjusted` = c(p_value_bhs_tot_1_robust_adjusted, p_value_bhs_tot_2_robust_adjusted),
   `d Between Groups` = c(dbetween_bhs_tot_1, dbetween_bhs_tot_2),
@@ -2427,8 +2986,9 @@ bhs_tot_table
 #Agency
 shs_agency_itt_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_shs_agency_itt_1_robust, t_value_shs_agency_itt_2_robust),
   `p-Value-Original` = c(p_value_shs_agency_itt_1_robust, p_value_shs_agency_itt_2_robust),
-  `p-Value-Adjusted` = c(p_value_shs_agency_itt_1_robust_adjusted, p_value_shs_agency_itt_2_robust_adjusted),
+  `p-Value-Adjusted` = c(p_value_shs_agency_itt_1_robust_adjusted, "NA"),
   `d Between Groups` = c(dbetween_shs_agency_itt_1, dbetween_shs_agency_itt_2),
   `d.av Intervention` = c(dav_intervention_shs_agency_itt_1, dav_intervention_shs_agency_itt_2),
   `d.av Control` = c(dav_control_shs_agency_itt_1, dav_control_shs_agency_itt_2),
@@ -2437,6 +2997,7 @@ shs_agency_itt_table <- data.frame(
 shs_agency_itt_table
 shs_agency_tot_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_shs_agency_tot_1_robust, t_value_shs_agency_tot_2_robust),
   `p-Value-Original` = c(p_value_shs_agency_tot_1_robust, p_value_shs_agency_tot_2_robust),
   `p-Value-Adjusted` = c(p_value_shs_agency_tot_1_robust_adjusted, p_value_shs_agency_tot_2_robust_adjusted),
   `d Between Groups` = c(dbetween_shs_agency_tot_1, dbetween_shs_agency_tot_2),
@@ -2449,8 +3010,9 @@ shs_agency_tot_table
 #Body image state
 biss_itt_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_biss_itt_1_robust, t_value_biss_itt_2_robust),
   `p-Value-Original` = c(p_value_biss_itt_1_robust, p_value_biss_itt_2_robust),
-  `p-Value-Adjusted` = c(p_value_biss_itt_1_robust_adjusted, p_value_biss_itt_2_robust_adjusted),
+  `p-Value-Adjusted` = c(p_value_biss_itt_1_robust_adjusted, "NA"),
   `d Between Groups` = c(dbetween_biss_itt_1, dbetween_biss_itt_2),
   `d.av Intervention` = c(dav_intervention_biss_itt_1, dav_intervention_biss_itt_2),
   `d.av Control` = c(dav_control_biss_itt_1, dav_control_biss_itt_2),
@@ -2459,6 +3021,7 @@ biss_itt_table <- data.frame(
 biss_itt_table
 biss_tot_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_biss_tot_1_robust, t_value_biss_tot_2_robust),
   `p-Value-Original` = c(p_value_biss_tot_1_robust, p_value_biss_tot_2_robust),
   `p-Value-Adjusted` = c(p_value_biss_tot_1_robust_adjusted, p_value_biss_tot_2_robust_adjusted),
   `d Between Groups` = c(dbetween_biss_tot_1, dbetween_biss_tot_2),
@@ -2471,8 +3034,9 @@ biss_tot_table
 #Functionality appreciation
 fas_itt_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_fas_itt_1_robust, t_value_fas_itt_2_robust),
   `p-Value-Original` = c(p_value_fas_itt_1_robust, p_value_fas_itt_2_robust),
-  `p-Value-Adjusted` = c(p_value_fas_itt_1_robust_adjusted, p_value_fas_itt_2_robust_adjusted),
+  `p-Value-Adjusted` = c(p_value_fas_itt_1_robust_adjusted, "NA"),
   `d Between Groups` = c(dbetween_fas_itt_1, dbetween_fas_itt_2),
   `d.av Intervention` = c(dav_intervention_fas_itt_1, dav_intervention_fas_itt_2),
   `d.av Control` = c(dav_control_fas_itt_1, dav_control_fas_itt_2),
@@ -2481,6 +3045,7 @@ fas_itt_table <- data.frame(
 fas_itt_table
 fas_tot_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_fas_tot_1_robust, t_value_fas_tot_2_robust),
   `p-Value-Original` = c(p_value_fas_tot_1_robust, p_value_fas_tot_2_robust),
   `p-Value-Adjusted` = c(p_value_fas_tot_1_robust_adjusted, p_value_fas_tot_2_robust_adjusted),
   `d Between Groups` = c(dbetween_fas_tot_1, dbetween_fas_tot_2),
@@ -2493,6 +3058,7 @@ fas_tot_table
 #Body image flexibility
 biaaq_itt_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_biaaq_itt_1_robust, t_value_biaaq_itt_2_robust),
   `p-Value-Original` = c(p_value_biaaq_itt_1_robust, p_value_biaaq_itt_2_robust),
   `d Between Groups` = c(dbetween_biaaq_itt_1, dbetween_biaaq_itt_2),
   `d.av Intervention` = c(dav_intervention_biaaq_itt_1, dav_intervention_biaaq_itt_2),
@@ -2502,6 +3068,7 @@ biaaq_itt_table <- data.frame(
 biaaq_itt_table
 biaaq_tot_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_biaaq_tot_1_robust, t_value_biaaq_tot_2_robust),
   `p-Value-Original` = c(p_value_biaaq_tot_1_robust, p_value_biaaq_tot_2_robust),
   `d Between Groups` = c(dbetween_biaaq_tot_1, dbetween_biaaq_tot_2),
   `d.av Intervention` = c(dav_intervention_biaaq_tot_1, dav_intervention_biaaq_tot_2),
@@ -2513,6 +3080,7 @@ biaaq_tot_table
 #Body-related mindfulness
 chime_itt_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_chime_itt_1_robust, t_value_chime_itt_2_robust),
   `p-Value-Original` = c(p_value_chime_itt_1_robust, p_value_chime_itt_2_robust),
   `d Between Groups` = c(dbetween_chime_itt_1, dbetween_chime_itt_2),
   `d.av Intervention` = c(dav_intervention_chime_itt_1, dav_intervention_chime_itt_2),
@@ -2522,6 +3090,7 @@ chime_itt_table <- data.frame(
 chime_itt_table
 chime_tot_table <- data.frame(
   `Phase` = c("Pre to Post", "Pre to Follow-up"),
+  `t-Value` = c(t_value_chime_tot_1_robust, t_value_chime_tot_2_robust),
   `p-Value-Original` = c(p_value_chime_tot_1_robust, p_value_chime_tot_2_robust),
   `d Between Groups` = c(dbetween_chime_tot_1, dbetween_chime_tot_2),
   `d.av Intervention` = c(dav_intervention_chime_tot_1, dav_intervention_chime_tot_2),
@@ -2533,8 +3102,8 @@ chime_tot_table
 #Depression symptoms
 mfq_itt_table <- data.frame(
   `Phase` = "Pre to Post",
+  `t-Value` = t_value_mfq_itt_robust,
   `p-Value-Original` = p_value_mfq_itt_robust,
-  `p-Value-Adjusted` = p_value_mfq_itt_robust_adjusted,
   `d Between Groups` = dbetween_mfq_itt,
   `d.av Intervention` = dav_intervention_mfq_itt,
   `d.av Control` = dav_control_mfq_itt,
@@ -2543,8 +3112,8 @@ mfq_itt_table <- data.frame(
 mfq_itt_table
 mfq_tot_table <- data.frame(
   `Phase` = "Pre to Post",
+  `t-Value` = t_value_mfq_tot_robust,
   `p-Value-Original` = p_value_mfq_tot_robust,
-  `p-Value-Adjusted` = p_value_mfq_tot_robust_adjusted,
   `d Between Groups` = dbetween_mfq_tot,
   `d.av Intervention` = dav_intervention_mfq_tot,
   `d.av Control` = dav_control_mfq_tot,
@@ -2555,8 +3124,8 @@ mfq_tot_table
 #Eating disorder symptoms
 edeq_itt_table <- data.frame(
   `Phase` = "Pre to Post",
+  `t-Value` = t_value_edeq_itt_robust,
   `p-Value-Original` = p_value_edeq_itt_robust,
-  `p-Value-Adjusted` = p_value_edeq_itt_robust_adjusted,
   `d Between Groups` = dbetween_edeq_itt,
   `d.av Intervention` = dav_intervention_edeq_itt,
   `d.av Control` = dav_control_edeq_itt,
@@ -2565,8 +3134,8 @@ edeq_itt_table <- data.frame(
 edeq_itt_table
 edeq_tot_table <- data.frame(
   `Phase` = "Pre to Post",
+  `t-Value` = t_value_edeq_tot_robust,
   `p-Value-Original` = p_value_edeq_tot_robust,
-  `p-Value-Adjusted` = p_value_edeq_tot_robust_adjusted,
   `d Between Groups` = dbetween_edeq_tot,
   `d.av Intervention` = dav_intervention_edeq_tot,
   `d.av Control` = dav_control_edeq_tot,
@@ -2577,6 +3146,7 @@ edeq_tot_table
 #Muscle dysmorphia symptoms
 mddi_itt_table <- data.frame(
   `Phase` = "Pre to Post",
+  `t-Value` = t_value_mddi_itt_robust,
   `p-Value-Original` = p_value_mddi_itt_robust,
   `d Between Groups` = dbetween_mddi_itt,
   `d.av Intervention` = dav_intervention_mddi_itt,
@@ -2586,6 +3156,7 @@ mddi_itt_table <- data.frame(
 mddi_itt_table
 mddi_tot_table <- data.frame(
   `Phase` = "Pre to Post",
+  `t-Value` = t_value_mddi_tot_robust,
   `p-Value-Original` = p_value_mddi_tot_robust,
   `d Between Groups` = dbetween_mddi_tot,
   `d.av Intervention` = dav_intervention_mddi_tot,
@@ -2609,17 +3180,23 @@ t.test(df_completer_pfs_nonimputed_intervention$pi_pfs_sum,  df_completer_pfs_no
 
 #Overall score for intervention participants
 df_completer_pfs_nonimputed_intervention %>%
-    summarize(mean = mean(pi_pfs_sum), 
-              sd = sd(pi_pfs_sum))
+  summarize(
+    mean_total = mean(pi_pfs_sum),
+    sd_total = sd(pi_pfs_sum),
+    mean_item = mean_total / 7,
+    sd_item = sd_total / 7)
 
 #Overall score for control participants
 df_completer_pfs_nonimputed_control %>%
-    summarize(mean = mean(pi_pfs_sum), 
-              sd = sd(pi_pfs_sum))
+  summarize(
+    mean_total = mean(pi_pfs_sum),
+    sd_total = sd(pi_pfs_sum),
+    mean_item = mean_total / 7,
+    sd_item = sd_total / 7)
 
 #Individual items for intervention participants
 df_completer_pfs_nonimputed_intervention %>%
-  select(pi_pfs_1:pi_pfs_7) %>%
+  dplyr::select(pi_pfs_1:pi_pfs_7) %>%
   pivot_longer(everything()) %>%
   group_by(name) %>%
   summarize(mean = mean(value), 
@@ -2627,31 +3204,31 @@ df_completer_pfs_nonimputed_intervention %>%
 
 #Individual items for control participants
 df_completer_pfs_nonimputed_control %>%
-  select(pi_pfs_1:pi_pfs_7) %>%
+  dplyr::select(pi_pfs_1:pi_pfs_7) %>%
   pivot_longer(everything()) %>%
   group_by(name) %>%
   summarize(mean = mean(value), 
             sd = sd(value))
 
-#N and percent of intervention participants with sum score >3 (selects Agree and Strongly Agree only),  reflect overall perceived SSI acceptability
+#N and percent of intervention participants with sum score >3 (selects Agree and Strongly Agree only), reflects overall perceived SSI acceptability
 df_completer_pfs_nonimputed_intervention %>%
   mutate(pi_pfs_sum_scores = pi_pfs_sum / 7,  
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
   summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
 
-#N and percent of intervention participants with sum score >4 (Strongly Agree only),  reflect overall perceived SSI acceptability
+#N and percent of intervention participants with sum score >4 (Strongly Agree only), reflects overall perceived SSI acceptability
 df_completer_pfs_nonimputed_intervention %>%
   mutate(pi_pfs_sum_scores = pi_pfs_sum / 7,  
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 4) %>%
   summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
 
-#N and percent of control participants with sum score >3 (selects Agree and Strongly Agree only),  reflect overall perceived SSI acceptability
+#N and percent of control participants with sum score >3 (selects Agree and Strongly Agree only), reflects overall perceived SSI acceptability
 df_completer_pfs_nonimputed_control %>%
   mutate(pi_pfs_sum_scores = pi_pfs_sum / 7,  
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 3) %>%
   summarise(pi_pfs_sum_scores_acceptable_percent = scales::percent(mean(pi_pfs_sum_scores_acceptable)))
 
-#N and percent of control participants with sum score >4 (selects Strongly Agree only),  reflect overall perceived SSI acceptability
+#N and percent of control participants with sum score >4 (selects Strongly Agree only), reflects overall perceived SSI acceptability
 df_completer_pfs_nonimputed_control %>%
   mutate(pi_pfs_sum_scores = pi_pfs_sum / 7,  
          pi_pfs_sum_scores_acceptable = pi_pfs_sum_scores > 4) %>%
@@ -2661,43 +3238,83 @@ df_completer_pfs_nonimputed_control %>%
 ```{r demographics}
 #Sex assigned at birth
 imputation_ready_with_IDs %>%
+  filter(treatment_group == "Intervention") %>%
+  count(b_dem_sex) %>%
+  mutate(percent = (n / sum(n))*100)
+
+imputation_ready_with_IDs %>%
+  filter(treatment_group == "Control") %>%
   count(b_dem_sex) %>%
   mutate(percent = (n / sum(n))*100)
 
 #Sexual orientation
 imputation_ready_with_IDs %>%
+  filter(treatment_group == "Intervention") %>%
+  count(b_dem_sexuality) %>%
+  mutate(percent = (n / sum(n))*100)
+
+imputation_ready_with_IDs %>%
+  filter(treatment_group == "Control") %>%
   count(b_dem_sexuality) %>%
   mutate(percent = (n / sum(n))*100)
 
 #Age
 imputation_ready_with_IDs %>% 
-  count(b_dem_age) %>% 
-  mutate(percent = (n / sum(n))*100)
+  filter(treatment_group == "Intervention") %>%
+  summarise(mean = mean(b_dem_age, na.rm = TRUE),
+            sd = sd(b_dem_age, na.rm = TRUE))
+
+imputation_ready_with_IDs %>% 
+  filter(treatment_group == "Control") %>%
+    summarise(mean = mean(b_dem_age, na.rm = TRUE),
+            sd = sd(b_dem_age, na.rm = TRUE))
+
+imputation_ready_with_IDs %>%  #full sample for reporting
+    summarise(mean = mean(b_dem_age, na.rm = TRUE),
+            sd = sd(b_dem_age, na.rm = TRUE))
 
 #Gender
-#imputation_ready_with_IDs %>%
-#  select(starts_with("b_dem_gender")) %>%
-#  summarize(across(everything(), #The line defines a function where x represents a column. List is used because there are two functions (n and %).
-#                   list(n = function(x) sum(x == 1), #Counts occurrences of 1 within the column x
-#                        percent = function(x) mean(x == 1) * 100))) #Calculates the percentages of 1s in the column x by calculating the proportion where the value of x is 1, and multiplying it by 100
-#The concise, tidyverse version of the above would be:
 imputation_ready_with_IDs %>%
-  select(starts_with("b_dem_gender")) %>% 
+  filter(treatment_group == "Intervention") %>%
+  dplyr::select(starts_with("b_dem_gender")) %>% 
+  summarize(across(everything(), 
+                   list(n = ~ sum(. == 1),
+                        percent = ~ mean(. == 1) * 100)))
+
+imputation_ready_with_IDs %>%
+  filter(treatment_group == "Control") %>%
+  dplyr::select(starts_with("b_dem_gender")) %>% 
   summarize(across(everything(), 
                    list(n = ~ sum(. == 1),
                         percent = ~ mean(. == 1) * 100)))
 
 #Race and ethnicity
 imputation_ready_with_IDs %>% 
-  select(starts_with("b_dem_race")) %>% 
+  filter(treatment_group == "Intervention") %>%
+  dplyr::select(starts_with("b_dem_race")) %>% 
   summarize(across(everything(),
                    list(n = ~ sum(.x == 1),
-                        percent = ~ mean(. == 1))))
+                        percent = ~ mean(. == 1) *100 )))
 
-#We could not get the disability items approved by the IRB in time
+imputation_ready_with_IDs %>% 
+  filter(treatment_group == "Control") %>%
+  dplyr::select(starts_with("b_dem_race")) %>% 
+  summarize(across(everything(),
+                   list(n = ~ sum(.x == 1),
+                        percent = ~ mean(. == 1) * 100)))
 
 #Food insecurity
+imputation_ready_with_IDs$b_hunger_1 <- as.numeric(imputation_ready_with_IDs$b_hunger_1)
+imputation_ready_with_IDs$b_hunger_2 <- as.numeric(imputation_ready_with_IDs$b_hunger_2)
+
 imputation_ready_with_IDs %>%
+  filter(treatment_group == "Intervention") %>%
+  mutate(b_food_insecure = if_else(b_hunger_1 >= 2 | b_hunger_2 >= 2, 1, 0)) %>% 
+  count(b_food_insecure) %>% 
+  mutate(percent = (n / sum(n))*100)
+
+imputation_ready_with_IDs %>%
+  filter(treatment_group == "Control") %>%
   mutate(b_food_insecure = if_else(b_hunger_1 >= 2 | b_hunger_2 >= 2, 1, 0)) %>% 
   count(b_food_insecure) %>% 
   mutate(percent = (n / sum(n))*100)
@@ -2708,37 +3325,150 @@ imputation_ready_with_IDs %>%
 
 ##Depression and mood problems
 imputation_ready_with_IDs %>% 
-  select(b_current_mood, b_past_mood, b_unmet_mood_now, b_unmet_mood_past) %>% 
+  filter(treatment_group == "Intervention") %>%
+  dplyr::select(b_current_mood, b_past_mood, b_unmet_mood_now, b_unmet_mood_past) %>% 
+  summarize(across(everything(),
+                   list(n = ~ sum(.x == 1, na.rm = TRUE),
+                        percent = ~ mean(. == 1, na.rm = TRUE) * 100)))
+
+imputation_ready_with_IDs %>% 
+  filter(treatment_group == "Control") %>%
+  dplyr::select(b_current_mood, b_past_mood, b_unmet_mood_now, b_unmet_mood_past) %>% 
   summarize(across(everything(),
                    list(n = ~ sum(.x == 1, na.rm = TRUE),
                         percent = ~ mean(. == 1, na.rm = TRUE) * 100)))
 
 ##Eating disorder and body image concerns
 imputation_ready_with_IDs %>% 
-  select(b_current_ed, b_past_ed, b_unmet_ed_now, b_unmet_ed_past) %>% 
+  filter(treatment_group == "Intervention") %>%
+  dplyr::select(b_current_ed, b_past_ed, b_unmet_ed_now, b_unmet_ed_past) %>% 
+  summarize(across(everything(),
+                   list(n = ~ sum(.x == 1, na.rm = TRUE),
+                        percent = ~ mean(. == 1, na.rm = TRUE) * 100)))
+
+imputation_ready_with_IDs %>% 
+  filter(treatment_group == "Control") %>%
+  dplyr::select(b_current_ed, b_past_ed, b_unmet_ed_now, b_unmet_ed_past) %>% 
   summarize(across(everything(),
                    list(n = ~ sum(.x == 1, na.rm = TRUE),
                         percent = ~ mean(. == 1, na.rm = TRUE) * 100)))
 ```
 
 ```{r compare-3-month-treatment-seeking}
-#Depression treatment seeking
+#New dataframe for everyone who did their follow-up survey, regardless of if they completed their SSI
+df_completer_followup_nonimputed_randomized <- df_completer_followup_nonimputed
 
-#Make contingency table
-f_new_support_mood_table <- table(df_completer_followup_nonimputed$f_new_support_mood, df_completer_followup_nonimputed$treatment_group)
-f_new_support_mood_table
+#New dataframe for everyone who did their follow-up survey, and completed their SSI
+df_completer_followup_nonimputed_completer_intervention <- df_completer_followup_nonimputed %>% 
+  filter(completer_intervention_assignment == "Completed")
 
-#Chi square
-chisq.test(f_new_support_mood_table)
+#Depression treatment-seeking
 
-#Eating disorder treatment seeking
+##All randomized, follow-up completers 
+binomialmodel_moodtx_randomized <- glm(f_new_support_mood ~ treatment_group + b_current_mood, data = df_completer_followup_nonimputed_randomized, family = "binomial")
+summary(binomialmodel_moodtx_randomized)
 
-#Make contingency table
-f_new_support_ed_table <- table(df_completer_followup_nonimputed$f_new_support_ed, df_completer_followup_nonimputed$treatment_group)
-f_new_support_ed_table
+##SSI completers, follow-up completers 
+binomialmodel_moodtx_completer_intervention <- glm(f_new_support_mood ~ treatment_group + b_current_mood, data = df_completer_followup_nonimputed_completer_intervention, family = "binomial")
+summary(binomialmodel_moodtx_completer_intervention)
 
-#Chi square
-chisq.test(f_new_support_ed_table)
+##Percentage of all randomized, follow-up completers with baseline treatment seeking by condition 
+df_completer_followup_nonimputed_randomized %>%
+  filter(treatment_group == "Intervention") %>%
+  count(b_current_mood) %>%
+  mutate(percent = (n / sum(n))*100)
+
+df_completer_followup_nonimputed_randomized %>%
+  filter(treatment_group == "Control") %>%
+  count(b_current_mood) %>%
+  mutate(percent = (n / sum(n))*100)
+
+##Percentage of SSI completers, follow-up completers with baseline treatment seeking by condition 
+df_completer_followup_nonimputed_completer_intervention %>%
+  filter(treatment_group == "Intervention") %>%
+  count(b_current_mood) %>%
+  mutate(percent = (n / sum(n))*100)
+
+df_completer_followup_nonimputed_completer_intervention %>%
+  filter(treatment_group == "Control") %>%
+  count(b_current_mood) %>%
+  mutate(percent = (n / sum(n))*100)
+
+##Percentage of all randomized, follow-up completers with new treatment seeking by condition 
+df_completer_followup_nonimputed_randomized %>%
+  filter(treatment_group == "Intervention") %>%
+  count(f_new_support_mood) %>%
+  mutate(percent = (n / sum(n))*100)
+
+df_completer_followup_nonimputed_randomized %>%
+  filter(treatment_group == "Control") %>%
+  count(f_new_support_mood) %>%
+  mutate(percent = (n / sum(n))*100)
+
+##Percentage of SSI completers, follow-up completers with new treatment seeking by condition 
+df_completer_followup_nonimputed_completer_intervention %>%
+  filter(treatment_group == "Intervention") %>%
+  count(f_new_support_mood) %>%
+  mutate(percent = (n / sum(n))*100)
+
+df_completer_followup_nonimputed_completer_intervention %>%
+  filter(treatment_group == "Control") %>%
+  count(f_new_support_mood) %>%
+  mutate(percent = (n / sum(n))*100)
+
+#ED treatment-seeking
+
+##All randomized, follow-up completers 
+binomialmodel_edtx_randomized <- glm(f_new_support_ed ~ treatment_group + b_current_ed, data = df_completer_followup_nonimputed_randomized, family = "binomial")
+summary(binomialmodel_edtx_randomized)
+
+##SSI completers, follow-up completers 
+binomialmodel_edtx_completer_intervention <- glm(f_new_support_ed ~ treatment_group + b_current_ed, data = df_completer_followup_nonimputed_completer_intervention, family = "binomial")
+summary(binomialmodel_edtx_completer_intervention)
+
+##Percentage of all randomized, follow-up completers with baseline treatment seeking by condition 
+df_completer_followup_nonimputed_randomized %>%
+  filter(treatment_group == "Intervention") %>%
+  count(b_current_ed) %>%
+  mutate(percent = (n / sum(n))*100)
+
+df_completer_followup_nonimputed_randomized %>%
+  filter(treatment_group == "Control") %>%
+  count(b_current_ed) %>%
+  mutate(percent = (n / sum(n))*100)
+
+##Percentage of SSI completers, follow-up completers with baseline treatment seeking by condition 
+df_completer_followup_nonimputed_completer_intervention %>%
+  filter(treatment_group == "Intervention") %>%
+  count(b_current_ed) %>%
+  mutate(percent = (n / sum(n))*100)
+
+df_completer_followup_nonimputed_completer_intervention %>%
+  filter(treatment_group == "Control") %>%
+  count(b_current_ed) %>%
+  mutate(percent = (n / sum(n))*100)
+
+##Percentage of all randomized, follow-up completers with new treatment seeking by condition 
+df_completer_followup_nonimputed_randomized %>%
+  filter(treatment_group == "Intervention") %>%
+  count(f_new_support_ed) %>%
+  mutate(percent = (n / sum(n))*100)
+
+df_completer_followup_nonimputed_randomized %>%
+  filter(treatment_group == "Control") %>%
+  count(f_new_support_ed) %>%
+  mutate(percent = (n / sum(n))*100)
+
+##Percentage of SSI completers, follow-up completers with new treatment seeking by condition 
+df_completer_followup_nonimputed_completer_intervention %>%
+  filter(treatment_group == "Intervention") %>%
+  count(f_new_support_ed) %>%
+  mutate(percent = (n / sum(n))*100)
+
+df_completer_followup_nonimputed_completer_intervention %>%
+  filter(treatment_group == "Control") %>%
+  count(f_new_support_ed) %>%
+  mutate(percent = (n / sum(n))*100)
 ```
 
 ```{r patterns-of-use}
@@ -2812,12 +3542,12 @@ missingness_handled_intervention_completers <- missingness_handled %>%
 
 #Extract columns with relevant timing variables
 names_in_order <- missingness_handled_intervention_completers %>%
-  select(ends_with("Page.Submit")) %>%
+  dplyr::select(ends_with("Page.Submit")) %>%
   names()
 
 #Put mean duration and sd for each page into a new data frame
 page_durations <- missingness_handled_intervention_completers %>% #
-  select(ends_with("Page.Submit")) %>%
+  dplyr::select(ends_with("Page.Submit")) %>%
     mutate(across(everything(), ~ as.numeric(as.character(.)))) %>%
   pivot_longer(cols = everything(),
                names_to = "page",
@@ -2827,7 +3557,7 @@ page_durations <- missingness_handled_intervention_completers %>% #
             sd_duration = sd(duration,  na.rm = T), .groups = "drop") 
 page_durations
 
-#Summarize duration for PBN
+#Summarize duration for intervention
 mean_sd_durations_intervention <- page_durations %>% 
   mutate(page_category = case_when(
     grepl("^bn_", page) ~ "intervention",
@@ -2841,7 +3571,7 @@ mean_sd_durations_intervention <- page_durations %>%
          sd_duration_minutes = sd_duration_seconds / 60)
 mean_sd_durations_intervention
 
-#Summarize duration for Control
+#Summarize duration for control
 mean_sd_durations_control <- page_durations %>% 
   mutate(page_category = case_when(
     grepl("^sf_", page) ~ "control",
@@ -2855,7 +3585,7 @@ mean_sd_durations_control <- page_durations %>%
          sd_duration_minutes = sd_duration_seconds / 60)
 mean_sd_durations_control
 
-#Now see how far those who were randomized but did not complete the SSI (a subset of the ITT sample) got through the intervention assigned
+#Now see how far those who were randomized but did not complete the SSI got through the intervention assigned
 
 #Number of people randomized who did not finish their condition - for intervention 
 missingness_handled_randomized_incomplete_intervention <- missingness_handled %>% 
@@ -2864,13 +3594,13 @@ count(missingness_handled_randomized_incomplete_intervention)
 
 #Progress of people randomized who did not finish their condition - for intervention 
 ssi_columns_randomized_incomplete_intervention <- missingness_handled_randomized_incomplete_intervention %>%
-  select(starts_with("bn_"))
+  dplyr::select(starts_with("bn_"))
 total_ssi_pages <- ncol(ssi_columns_randomized_incomplete_intervention)
 ssi_progress_randomized_incomplete_intervention <- missingness_handled_randomized_incomplete_intervention %>%
   mutate(ssi_pages_completed = rowSums(!is.na(ssi_columns_randomized_incomplete_intervention)),
          ssi_percent_completed = (ssi_pages_completed / total_ssi_pages) * 100)
 ssi_progress_randomized_incomplete_intervention %>%
-  select(Participant_ID, ssi_pages_completed, ssi_percent_completed)
+  dplyr::select(Participant_ID, ssi_pages_completed, ssi_percent_completed)
 
 #Number of people randomized who did not finish their condition - for control 
 missingness_handled_randomized_incomplete_control <- missingness_handled %>% 
@@ -2879,16 +3609,16 @@ count(missingness_handled_randomized_incomplete_control)
 
 #Progress of people randomized who did not finish their condition - for control
 ssi_columns_randomized_incomplete_control <- missingness_handled_randomized_incomplete_control %>%
-  select(starts_with("sf_"))
+  dplyr::select(starts_with("sf_"))
 total_ssi_pages <- ncol(ssi_columns_randomized_incomplete_control)
 ssi_progress_randomized_incomplete_control <- missingness_handled_randomized_incomplete_control %>%
   mutate(ssi_pages_completed = rowSums(!is.na(ssi_columns_randomized_incomplete_control)),
          ssi_percent_completed = (ssi_pages_completed / total_ssi_pages) * 100)
 ssi_progress_randomized_incomplete_control %>%
-  select(Participant_ID, ssi_pages_completed, ssi_percent_completed)
+  dplyr::select(Participant_ID, ssi_pages_completed, ssi_percent_completed)
 ```
 
-```{r exploratory analyses}
+```{r baseline-symptom-cutoff-exploratory-analyses}
 #Moderation based on continuous baseline EDE-Q global score, outcome is continuous follow-up EDE-Q global score
 
 ##ITT
@@ -2947,14 +3677,14 @@ tidy(lm_explore_edeq_2_itt)
 
 ####Descriptives for intervention below threshold
 edeq_stats_intervention_itt_below_threshold <- df_randomized_imputed_below_threshold_intervention %>%
-  select(b_edeq_global, f_edeq_global) %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ####Descriptives for control below threshold
 edeq_stats_control_itt_below_threshold <- df_randomized_imputed_below_threshold_control %>%
-  select(b_edeq_global, f_edeq_global) %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
@@ -3009,14 +3739,14 @@ tidy(lm_explore_edeq_3_itt)
 
 ####Descriptives for intervention above threshold
 edeq_stats_intervention_itt_above_threshold <- df_randomized_imputed_above_threshold_intervention %>%
-  select(b_edeq_global, f_edeq_global) %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ####Descriptives for control above threshold
 edeq_stats_control_itt_above_threshold <- df_randomized_imputed_above_threshold_control %>%
-  select(b_edeq_global, f_edeq_global) %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
@@ -3105,14 +3835,14 @@ tidy(lm_explore_edeq_2_tot)
 
 ####Descriptives for intervention below threshold
 edeq_stats_intervention_tot_below_threshold <- df_completer_intervention_imputed_below_threshold_intervention %>%
-  select(b_edeq_global, f_edeq_global) %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ####Descriptives for control below threshold
 edeq_stats_control_tot_below_threshold <- df_completer_intervention_imputed_below_threshold_control %>%
-  select(b_edeq_global, f_edeq_global) %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
@@ -3167,14 +3897,14 @@ tidy(lm_explore_edeq_3_tot)
 
 ####Descriptives for intervention above threshold
 edeq_stats_intervention_tot_above_threshold <- df_completer_intervention_imputed_above_threshold_intervention %>%
-  select(b_edeq_global, f_edeq_global) %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
 
 ####Descriptives for control above threshold
 edeq_stats_control_tot_above_threshold <- df_completer_intervention_imputed_above_threshold_control %>%
-  select(b_edeq_global, f_edeq_global) %>%
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
   mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
   summarize(n = n(), 
             across(everything(),  list(mean = mean,  sd = sd))) 
@@ -3236,7 +3966,7 @@ lm_explore_mfq_sum_1_tot <- lm(f_mfq_sum ~ b_mfq_sum + treatment_group + b_mfq_s
 tidy(lm_explore_mfq_sum_1_tot)
 ```
 
-```{r plot for signifcant EDE-Q interaction}
+```{r plot-for-EDE-Q-interaction-ITT}
 df_randomized_imputed %>%
   mutate(
     edeq_threshold = b_edeq_global >= 2.8) %>% #2.8 is the suggested clinical cutoff
@@ -3271,9 +4001,9 @@ df_randomized_imputed %>%
   theme_classic()
 ```
 
-```{r plot for proximal outcomes - ITT}
-df_bhs <- descriptives %>%
-  select(treatment_group, b_bhs_sum_mean, pi_bhs_sum_mean) %>%
+```{r plot-for-proximal-outcomes-ITT}
+df_bhs <- descriptives_itt %>%
+  dplyr::select(treatment_group, b_bhs_sum_mean, pi_bhs_sum_mean) %>%
   rename(Pre = b_bhs_sum_mean, Post = pi_bhs_sum_mean) %>%
   pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
   mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
@@ -3284,8 +4014,8 @@ plot_bhs <- ggplot(df_bhs, aes(x = time, y = score, group = treatment_group, col
   theme_classic()
 plot_bhs
 
-df_shs_agency <- descriptives %>%
-  select(treatment_group, b_shs_agency_sum_mean, pi_shs_agency_sum_mean) %>%
+df_shs_agency <- descriptives_itt %>%
+  dplyr::select(treatment_group, b_shs_agency_sum_mean, pi_shs_agency_sum_mean) %>%
   rename(Pre = b_shs_agency_sum_mean, Post = pi_shs_agency_sum_mean) %>%
   pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
   mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
@@ -3296,8 +4026,8 @@ plot_shs_agency <- ggplot(df_shs_agency, aes(x = time, y = score, group = treatm
   theme_classic()
 plot_shs_agency
 
-df_fas <- descriptives %>%
-  select(treatment_group, b_fas_sum_mean, pi_fas_sum_mean) %>%
+df_fas <- descriptives_itt %>%
+  dplyr::select(treatment_group, b_fas_sum_mean, pi_fas_sum_mean) %>%
   rename(Pre = b_fas_sum_mean, Post = pi_fas_sum_mean) %>%
   pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
   mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
@@ -3308,8 +4038,8 @@ plot_fas <- ggplot(df_fas, aes(x = time, y = score, group = treatment_group, col
   theme_classic()
 plot_fas
 
-df_biss <- descriptives %>%
-  select(treatment_group, b_biss_sum_mean, pi_biss_sum_mean) %>%
+df_biss <- descriptives_itt %>%
+  dplyr::select(treatment_group, b_biss_sum_mean, pi_biss_sum_mean) %>%
   rename(Pre = b_biss_sum_mean, Post = pi_biss_sum_mean) %>%
   pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
   mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
@@ -3319,11 +4049,9 @@ plot_biss <- ggplot(df_biss, aes(x = time, y = score, group = treatment_group, c
   labs(title = "State Body Image", x = "Time", y = "Score", color = "Treatment Group") +
   theme_classic()
 plot_biss
-
-grid.arrange(plot_bhs, plot_shs_agency, plot_fas, plot_biss, ncol = 2)
 ```
 
-```{r internal-consistency-itt}
+```{r internal-consistency-ITT}
 #EDEQ
 b_edeq_df <- df_randomized_imputed %>%
   dplyr::select(b_edeq_1:b_edeq_10)
@@ -3433,4 +4161,163 @@ cronbach.alpha(pi_chime_df)
 f_chime_df <- df_randomized_imputed %>%
   dplyr::select(f_chime_1:f_chime_3)
 cronbach.alpha(f_chime_df)
+```
+
+```{r testing-if-baseline-symptoms-and-demographics-differ-by-group}
+#Hopelessness
+t.test(b_bhs_sum ~ treatment_group, data = imputation_ready_with_IDs, var.equal = TRUE)
+
+#Agency
+t.test(b_shs_agency_sum ~ treatment_group, data = imputation_ready_with_IDs, var.equal = TRUE)
+
+#State body image
+t.test(b_biss_sum ~ treatment_group, data = imputation_ready_with_IDs, var.equal = TRUE)
+
+#Functionality appreciation
+t.test(b_fas_sum ~ treatment_group, data = imputation_ready_with_IDs, var.equal = TRUE)
+
+#Eating disorder symptoms
+t.test(b_edeq_global ~ treatment_group, data = imputation_ready_with_IDs, var.equal = TRUE)
+
+#Depression symptoms
+t.test(b_mfq_sum ~ treatment_group, data = imputation_ready_with_IDs, var.equal = TRUE)
+
+#Age
+t.test(b_dem_age ~ treatment_group, data = imputation_ready_with_IDs, var.equal = TRUE)
+
+#SAAB
+b_dem_saab_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sex)
+chisq.test(b_dem_saab_table)
+
+#Gender
+b_dem_gender_1_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_1)
+chisq.test(b_dem_gender_1_table)
+
+b_dem_gender_2_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_2)
+chisq.test(b_dem_gender_2_table)
+
+b_dem_gender_3_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_3)
+chisq.test(b_dem_gender_3_table)
+
+b_dem_gender_4_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_4)
+chisq.test(b_dem_gender_4_table)
+
+b_dem_gender_5_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_5)
+chisq.test(b_dem_gender_5_table)
+
+b_dem_gender_6_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_6)
+chisq.test(b_dem_gender_6_table)
+
+b_dem_gender_7_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_7)
+chisq.test(b_dem_gender_7_table)
+
+b_dem_gender_8_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_8)
+chisq.test(b_dem_gender_8_table)
+
+b_dem_gender_9_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_9)
+chisq.test(b_dem_gender_9_table)
+
+b_dem_gender_10_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_10)
+chisq.test(b_dem_gender_10_table)
+
+b_dem_gender_11_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_11)
+chisq.test(b_dem_gender_11_table)
+
+b_dem_gender_12_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_12)
+chisq.test(b_dem_gender_12_table)
+
+b_dem_gender_13_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_13)
+chisq.test(b_dem_gender_13_table)
+
+b_dem_gender_14_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_14)
+chisq.test(b_dem_gender_14_table)
+#Significant difference
+
+b_dem_gender_15_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_15)
+chisq.test(b_dem_gender_15_table)
+
+b_dem_gender_16_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_gender_16)
+chisq.test(b_dem_gender_16_table)
+
+#Sexual orientation
+
+#First need to transform data to be binary
+imputation_ready_with_IDs <- as_tibble(imputation_ready_with_IDs)
+transforming_sexuality <- imputation_ready_with_IDs %>% 
+  dplyr::select(Participant_ID, b_dem_sexuality) %>%  
+  separate_rows(b_dem_sexuality, sep = ",") %>%  
+  pivot_wider(
+    names_from = b_dem_sexuality,
+    values_from = b_dem_sexuality,
+    values_fill = list(b_dem_sexuality = 0)  
+  ) %>%
+  mutate(across(-Participant_ID, ~ as.factor(as.numeric(. != 0)))) %>%  
+  rename_with(~ str_c("b_dem_sexuality_", .), -Participant_ID)  
+imputation_ready_with_IDs <- imputation_ready_with_IDs %>%
+  left_join(transforming_sexuality, by = "Participant_ID")  
+
+b_dem_sexuality_1_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sexuality_1)
+chisq.test(b_dem_sexuality_1_table)
+
+b_dem_sexuality_2_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sexuality_2)
+chisq.test(b_dem_sexuality_2_table)
+
+b_dem_sexuality_3_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sexuality_3)
+chisq.test(b_dem_sexuality_3_table)
+
+b_dem_sexuality_4_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sexuality_4)
+chisq.test(b_dem_sexuality_4_table)
+
+b_dem_sexuality_5_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sexuality_5)
+chisq.test(b_dem_sexuality_5_table)
+
+b_dem_sexuality_6_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sexuality_6)
+chisq.test(b_dem_sexuality_6_table)
+
+b_dem_sexuality_7_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sexuality_7)
+chisq.test(b_dem_sexuality_7_table)
+
+b_dem_sexuality_8_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sexuality_8)
+chisq.test(b_dem_sexuality_8_table)
+
+b_dem_sexuality_9_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sexuality_9)
+chisq.test(b_dem_sexuality_9_table)
+
+#b_dem_sexuality_10_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_sexuality_10)
+#chisq.test(b_dem_sexuality_10_table)
+#Not running because 0 in both groups 
+
+#Race and ethnicity
+
+b_dem_race_ethnicity_1_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_race_ethnicity_1)
+chisq.test(b_dem_race_ethnicity_1_table)
+#Significant difference (borderline)
+
+b_dem_race_ethnicity_2_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_race_ethnicity_2)
+chisq.test(b_dem_race_ethnicity_2_table)
+
+b_dem_race_ethnicity_3_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_race_ethnicity_3)
+chisq.test(b_dem_race_ethnicity_3_table)
+
+b_dem_race_ethnicity_4_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_race_ethnicity_4)
+chisq.test(b_dem_race_ethnicity_4_table)
+
+b_dem_race_ethnicity_5_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_race_ethnicity_5)
+chisq.test(b_dem_race_ethnicity_5_table)
+
+b_dem_race_ethnicity_6_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_race_ethnicity_6)
+chisq.test(b_dem_race_ethnicity_6_table)
+
+b_dem_race_ethnicity_7_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_race_ethnicity_7)
+chisq.test(b_dem_race_ethnicity_7_table)
+
+b_dem_race_ethnicity_8_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_dem_race_ethnicity_8)
+chisq.test(b_dem_race_ethnicity_8_table)
+
+#Food insecurity
+b_hunger_1_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_hunger_1)
+chisq.test(b_hunger_1_table)
+
+b_hunger_2_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_hunger_2)
+chisq.test(b_hunger_2_table)
 ```
