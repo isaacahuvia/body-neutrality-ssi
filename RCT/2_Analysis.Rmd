@@ -69,12 +69,12 @@ df_completer_followup_nonimputed <- imputation_ready_with_IDs %>%
 
 ```{r extract-data-for-qual-analysis}
 #Dataframe for qualitative analysis (intervention completers with PFS data)
-qual_data_intervention <- df_completer_pfs_nonimputed %>% 
-  filter(completer_pfs == "Completed" & treatment_group == "Intervention") %>% 
-  dplyr::select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)  
-qual_data_control <- df_completer_pfs_nonimputed %>% 
-  filter(completer_pfs == "Completed" & treatment_group == "Control") %>% 
-  dplyr::select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)  
+#qual_data_intervention <- df_completer_pfs_nonimputed %>% 
+  #filter(completer_pfs == "Completed" & treatment_group == "Intervention") %>% 
+  #dplyr::select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)  
+#qual_data_control <- df_completer_pfs_nonimputed %>% 
+  #filter(completer_pfs == "Completed" & treatment_group == "Control") %>% 
+  #dplyr::select(Participant_ID, pi_pfs_like, pi_pfs_change, pi_pfs_other)  
 
 #Table export
 #flextable::flextable(qual_data_intervention,  cwidth = c(0.5, 7, 0.5))
@@ -3367,10 +3367,14 @@ df_completer_followup_nonimputed_completer_intervention <- df_completer_followup
 ##All randomized, follow-up completers 
 binomialmodel_moodtx_randomized <- glm(f_new_support_mood ~ treatment_group + b_current_mood, data = df_completer_followup_nonimputed_randomized, family = "binomial")
 summary(binomialmodel_moodtx_randomized)
+exp(coef(binomialmodel_moodtx_randomized))
+exp(confint(binomialmodel_moodtx_randomized))
 
 ##SSI completers, follow-up completers 
 binomialmodel_moodtx_completer_intervention <- glm(f_new_support_mood ~ treatment_group + b_current_mood, data = df_completer_followup_nonimputed_completer_intervention, family = "binomial")
 summary(binomialmodel_moodtx_completer_intervention)
+exp(coef(binomialmodel_moodtx_completer_intervention))
+exp(confint(binomialmodel_moodtx_completer_intervention))
 
 ##Percentage of all randomized, follow-up completers with baseline treatment seeking by condition 
 df_completer_followup_nonimputed_randomized %>%
@@ -3421,10 +3425,14 @@ df_completer_followup_nonimputed_completer_intervention %>%
 ##All randomized, follow-up completers 
 binomialmodel_edtx_randomized <- glm(f_new_support_ed ~ treatment_group + b_current_ed, data = df_completer_followup_nonimputed_randomized, family = "binomial")
 summary(binomialmodel_edtx_randomized)
+exp(coef(binomialmodel_edtx_randomized))
+exp(confint(binomialmodel_edtx_randomized))
 
 ##SSI completers, follow-up completers 
 binomialmodel_edtx_completer_intervention <- glm(f_new_support_ed ~ treatment_group + b_current_ed, data = df_completer_followup_nonimputed_completer_intervention, family = "binomial")
 summary(binomialmodel_edtx_completer_intervention)
+exp(coef(binomialmodel_edtx_completer_intervention))
+exp(confint(binomialmodel_edtx_completer_intervention))
 
 ##Percentage of all randomized, follow-up completers with baseline treatment seeking by condition 
 df_completer_followup_nonimputed_randomized %>%
@@ -3545,8 +3553,38 @@ names_in_order <- missingness_handled_intervention_completers %>%
   dplyr::select(ends_with("Page.Submit")) %>%
   names()
 
-#Put mean duration and sd for each page into a new data frame
-page_durations <- missingness_handled_intervention_completers %>% #
+#Remove outliers for intervention
+intervention_duration_data <- missingness_handled_intervention_completers %>%
+  dplyr::select(Participant_ID, matches("^bn_.*Page\\.Submit"))
+total_intervention_duration <- intervention_duration_data %>%
+  mutate(total_duration = rowSums(across(-Participant_ID), na.rm = TRUE))
+Q1intervention <- quantile(total_intervention_duration$total_duration, 0.25, na.rm = TRUE)
+Q3intervention <- quantile(total_intervention_duration$total_duration, 0.75, na.rm = TRUE)
+IQRintervention <- Q3intervention - Q1intervention
+lower_bound_intervention <- Q1intervention - 1.5 * IQRintervention
+upper_bound_intervention <- Q3intervention + 1.5 * IQRintervention
+filtered_total_intervention_duration <- total_intervention_duration %>%
+  filter(total_duration >= lower_bound_intervention & total_duration <= upper_bound_intervention)
+no_outliers_intervention_duration <- missingness_handled_intervention_completers %>%
+  semi_join(filtered_total_intervention_duration, by = "Participant_ID")
+
+#Remove outliers for control
+control_duration_data <- missingness_handled_intervention_completers %>%
+  dplyr::select(Participant_ID, matches("^sf_.*Page\\.Submit"))
+total_control_duration <- control_duration_data %>%
+  mutate(total_duration = rowSums(across(-Participant_ID), na.rm = TRUE))
+Q1control <- quantile(total_control_duration$total_duration, 0.25, na.rm = TRUE)
+Q3control <- quantile(total_control_duration$total_duration, 0.75, na.rm = TRUE)
+IQRcontrol <- Q3control - Q1control
+lower_bound_control <- Q1control - 1.5 * IQRcontrol
+upper_bound_control <- Q3control + 1.5 * IQRcontrol
+filtered_total_control_duration <- total_control_duration %>%
+  filter(total_duration >= lower_bound_control & total_duration <= upper_bound_control)
+no_outliers_control_duration <- missingness_handled_intervention_completers %>%
+  semi_join(filtered_total_control_duration, by = "Participant_ID")
+
+#Put mean duration and sd for each page into a new data frame for intervention
+page_durations_intervention <- no_outliers_intervention_duration %>% #
   dplyr::select(ends_with("Page.Submit")) %>%
     mutate(across(everything(), ~ as.numeric(as.character(.)))) %>%
   pivot_longer(cols = everything(),
@@ -3555,10 +3593,22 @@ page_durations <- missingness_handled_intervention_completers %>% #
   group_by(page) %>%
   summarise(mean_duration = mean(duration, na.rm = T),
             sd_duration = sd(duration,  na.rm = T), .groups = "drop") 
-page_durations
+page_durations_intervention
+
+#Put mean duration and sd for each page into a new data frame for control
+page_durations_control <- no_outliers_control_duration %>% #
+  dplyr::select(ends_with("Page.Submit")) %>%
+    mutate(across(everything(), ~ as.numeric(as.character(.)))) %>%
+  pivot_longer(cols = everything(),
+               names_to = "page",
+               values_to = "duration") %>%
+  group_by(page) %>%
+  summarise(mean_duration = mean(duration, na.rm = T),
+            sd_duration = sd(duration,  na.rm = T), .groups = "drop") 
+page_durations_control
 
 #Summarize duration for intervention
-mean_sd_durations_intervention <- page_durations %>% 
+mean_sd_durations_intervention <- page_durations_intervention %>% 
   mutate(page_category = case_when(
     grepl("^bn_", page) ~ "intervention",
     TRUE ~ "other"
@@ -3572,7 +3622,7 @@ mean_sd_durations_intervention <- page_durations %>%
 mean_sd_durations_intervention
 
 #Summarize duration for control
-mean_sd_durations_control <- page_durations %>% 
+mean_sd_durations_control <- page_durations_control %>% 
   mutate(page_category = case_when(
     grepl("^sf_", page) ~ "control",
     TRUE ~ "other"
@@ -3967,88 +4017,164 @@ tidy(lm_explore_mfq_sum_1_tot)
 ```
 
 ```{r plot-for-EDE-Q-interaction-ITT}
-df_randomized_imputed %>%
+interaction_plot <- df_randomized_imputed %>%
   mutate(
-    edeq_threshold = b_edeq_global >= 2.8) %>% #2.8 is the suggested clinical cutoff
+    edeq_threshold = b_edeq_global >= 2.8  #clinical cutoff
+  ) %>%
   group_by(treatment_group, edeq_threshold) %>%
   summarize(
     b_edeq_mean = mean(b_edeq_global),
     f_edeq_mean = mean(f_edeq_global),
-    .groups = "drop") %>%
+     b_edeq_ci95 = (sd(b_edeq_global) / sqrt(n())) * 1.96,
+    f_edeq_ci95 = (sd(f_edeq_global) / sqrt(n())) * 1.96,
+    .groups = "drop"
+  ) %>%
   pivot_longer(
-    cols = c(b_edeq_mean, f_edeq_mean)) %>%
-  ggplot() +
-  geom_point(
-    aes(
-      x = name,
-      y = value,
-      color = treatment_group,
-      linetype = edeq_threshold)) + 
-  geom_line(  
-    aes(
-      x = name,
-      y = value,
-      group = interaction(treatment_group, edeq_threshold),
-      color = treatment_group,
-      linetype = edeq_threshold)) +
- scale_y_continuous(
+    cols = c(b_edeq_mean, f_edeq_mean),
+    names_to = "timepoint",
+    values_to = "value"
+  ) %>%
+  mutate(
+    ci95 = ifelse(timepoint == "b_edeq_mean", b_edeq_ci95, f_edeq_ci95)
+  ) %>%
+  ggplot(aes(x = timepoint, y = value, color = treatment_group, linetype = edeq_threshold)) +
+  geom_line(aes(group = interaction(treatment_group, edeq_threshold))) + 
+  geom_hline(yintercept = 2.8, linetype = "dotted", color = "black") +
+  geom_point(size = 2) +  
+  geom_errorbar(aes(
+      ymin = value - ci95,  
+      ymax = value + ci95),
+      width = 0.1, linetype = "solid") +
+  scale_y_continuous(
     limits = c(0, 6),          
-    breaks = seq(0, 6, by = 0.5)) + 
-    labs(
+    breaks = seq(0, 6, by = 1)) + 
+  scale_x_discrete(
+    labels = c("b_edeq_mean" = "Pre-Intervention", "f_edeq_mean" = "3-Month Follow-Up")
+  ) +
+  labs(
     x = "Timepoint",
-    y = "EDE-Q Global Score"
+    y = "EDE-Q Global Score",
+    color = "Treatment Group",
+    linetype = "EDE-Q Severity" 
+  ) +
+  scale_color_manual(
+    values = c("Control" = "#F8766D", "Intervention" = "#00BFC4"),
+    labels = c("Control", "Intervention") 
+  ) +
+  scale_linetype_manual(
+    values = c("TRUE" = "solid", "FALSE" = "dashed"),  
+    labels = c("Above Threshold", "Below Threshold")
   ) +
   theme_classic()
+interaction_plot
+
+#ggsave("~/Desktop/interaction_plot.png", plot = interaction_plot, width = 8, height = 6, units = "in", dpi = 300)
+```
+
+```{r plot-for-primary-outcomes}
+long_primary_outcomes <- df_randomized_imputed %>%
+  dplyr::select(treatment_group, b_edeq_global, f_edeq_global, 
+                b_mfq_sum, f_mfq_sum) %>%
+  pivot_longer(
+    cols = -treatment_group,
+    names_to = c("time", "measure"),
+    names_pattern = "(b|f)_(.*)",  
+    values_to = "score"
+  ) %>%
+  mutate(
+    time = case_when(
+      time == "b" ~ "Pre-Intervention",
+      time == "f" ~ "3-Month Follow-Up"
+    ),
+    measure = case_when(
+      measure == "edeq_global" ~ "Eating Disorder Symptoms",
+      measure == "mfq_sum" ~ "Depression Symptoms"
+    ),
+    time = factor(time, levels = c("Pre-Intervention", "3-Month Follow-Up"))
+  )
+
+primary_plot <- ggplot(long_primary_outcomes, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  stat_summary(fun = mean, geom = "line") +
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.1) +
+  stat_summary(fun = mean, geom = "point", size = 2) +
+  facet_wrap(~ measure, scales = "free_y") +
+  theme_classic() +
+  labs(x = "Timepoint", y = "Score", color = "Treatment Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facetted_pos_scales(
+    y = list(
+      measure == "Eating Disorder Symptoms" ~ scale_y_continuous(
+        limits = c(0, 6),
+        breaks = seq(0, 6, by = 1)
+      ),
+      measure == "Depression Symptoms" ~ scale_y_continuous(
+        limits = c(0, 26),
+        breaks = seq(0, 26, by = 5)
+      )
+    ))
+primary_plot
+
+#ggsave("~/Desktop/primary_plot.png", plot = primary_plot, width = 8, height = 6, units = "in", dpi = 300)
 ```
 
 ```{r plot-for-proximal-outcomes-ITT}
-df_bhs <- descriptives_itt %>%
-  dplyr::select(treatment_group, b_bhs_sum_mean, pi_bhs_sum_mean) %>%
-  rename(Pre = b_bhs_sum_mean, Post = pi_bhs_sum_mean) %>%
-  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
-  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
-plot_bhs <- ggplot(df_bhs, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
-  geom_line(size = 1) +
-  geom_point(size = 2) +
-  labs(title = "Hopelessness", x = "Time", y = "Score", color = "Treatment Group") +
-  theme_classic()
-plot_bhs
+long_proximal_outcomes <- df_randomized_imputed %>%
+  dplyr::select(treatment_group, b_bhs_sum, pi_bhs_sum, f_bhs_sum,
+                b_shs_agency_sum, pi_shs_agency_sum, f_shs_agency_sum,
+                b_fas_sum, pi_fas_sum, f_fas_sum,
+                b_biss_sum, pi_biss_sum, f_biss_sum) %>% 
+  pivot_longer(
+    cols = -treatment_group,
+    names_to = c("time", "measure"),
+    names_pattern = "(b|pi|f)_(.*)",  
+    values_to = "score"
+  ) %>%
+  mutate(
+    time = case_when(
+      time == "b" ~ "Pre-Intervention",
+      time == "pi" ~ "Post-Intervention",
+      time == "f" ~ "3-Month Follow-Up"
+    ),
+    measure = case_when(
+      measure == "bhs_sum" ~ "Hopelessness",
+      measure == "shs_agency_sum" ~ "Perceived Agency",
+      measure == "fas_sum" ~ "Functionality Appreciation",
+      measure == "biss_sum" ~ "State Body Image"
+    ),
+    time = factor(time, levels = c("Pre-Intervention", "Post-Intervention", "3-Month Follow-Up"))
+  )
 
-df_shs_agency <- descriptives_itt %>%
-  dplyr::select(treatment_group, b_shs_agency_sum_mean, pi_shs_agency_sum_mean) %>%
-  rename(Pre = b_shs_agency_sum_mean, Post = pi_shs_agency_sum_mean) %>%
-  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
-  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
-plot_shs_agency <- ggplot(df_shs_agency, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
-  geom_line(size = 1) +
-  geom_point(size = 2) +
-  labs(title = "Agency", x = "Time", y = "Score", color = "Treatment Group") +
-  theme_classic()
-plot_shs_agency
+proximal_plot <- ggplot(long_proximal_outcomes, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  stat_summary(fun = mean, geom = "line") +
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.1) +
+  stat_summary(fun = mean, geom = "point", size = 2) +
+  facet_wrap(~ measure, scales = "free_y") +
+  theme_classic() +
+  labs(x = "Timepoint", y = "Score", color = "Treatment Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facetted_pos_scales(
+    y = list(
+      measure == "Hopelessness" ~ scale_y_continuous(
+        limits = c(0, 12),
+        breaks = seq(0, 12, by = 2)
+      ),
+      measure == "Perceived Agency" ~ scale_y_continuous(
+        limits = c(3, 24),
+        breaks = seq(3, 24, by = 3)
+      ),
+      measure == "Functionality Appreciation" ~ scale_y_continuous(
+        limits = c(7, 35),
+        breaks = seq(7, 35, by = 7),
+      ),
+      measure == "State Body Image" ~ scale_y_continuous(
+        limits = c(6, 54),
+        breaks = seq(6, 54, by = 6)
+      )
+    )
+  )
+proximal_plot
 
-df_fas <- descriptives_itt %>%
-  dplyr::select(treatment_group, b_fas_sum_mean, pi_fas_sum_mean) %>%
-  rename(Pre = b_fas_sum_mean, Post = pi_fas_sum_mean) %>%
-  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
-  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
-plot_fas <- ggplot(df_fas, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
-  geom_line(size = 1) +
-  geom_point(size = 2) +
-  labs(title = "Functionality Appreciation", x = "Time", y = "Score", color = "Treatment Group") +
-  theme_classic()
-plot_fas
-
-df_biss <- descriptives_itt %>%
-  dplyr::select(treatment_group, b_biss_sum_mean, pi_biss_sum_mean) %>%
-  rename(Pre = b_biss_sum_mean, Post = pi_biss_sum_mean) %>%
-  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
-  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
-plot_biss <- ggplot(df_biss, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
-  geom_line(size = 1) +
-  geom_point(size = 2) +
-  labs(title = "State Body Image", x = "Time", y = "Score", color = "Treatment Group") +
-  theme_classic()
-plot_biss
+#ggsave("~/Desktop/proximal_plot.png", plot = proximal_plot, width = 8, height = 6, units = "in", dpi = 300)
 ```
 
 ```{r internal-consistency-ITT}
