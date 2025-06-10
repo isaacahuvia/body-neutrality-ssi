@@ -1,3 +1,8 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
 
 ```{r working-directory}
 knitr::opts_knit$set(root.dir = "/Volumes/fsmresfiles/MSS/Schleider_Lab/jslab/Project Body Neutrality/RCT/Data/Full Sample (Baseline and Follow-Up)")
@@ -36,8 +41,13 @@ if(!require(lmerTest)){install.packages('lmerTest')}
 library(lmerTest)
 if(!require(ltm)){install.packages('ltm')}
 library(ltm)
+if(!require(effsize)){install.packages('effsize')}
+library(effsize)
+if(!require(ggh4x)){install.packages('ggh4x')}
+library(ggh4x)
 
 options(digits = 5)
+options(scipen = 999)
 ```
 
 ```{r load-imputed-data}
@@ -3176,6 +3186,7 @@ df_completer_pfs_nonimputed_control <- df_completer_pfs_nonimputed %>%
 
 #Check if there are differences in total PFS
 t.test(df_completer_pfs_nonimputed_intervention$pi_pfs_sum,  df_completer_pfs_nonimputed_control$pi_pfs_sum)
+
 #Significant differences in favor of PBN
 
 #Overall score for intervention participants
@@ -3375,6 +3386,7 @@ binomialmodel_moodtx_completer_intervention <- glm(f_new_support_mood ~ treatmen
 summary(binomialmodel_moodtx_completer_intervention)
 exp(coef(binomialmodel_moodtx_completer_intervention))
 exp(confint(binomialmodel_moodtx_completer_intervention))
+
 
 ##Percentage of all randomized, follow-up completers with baseline treatment seeking by condition 
 df_completer_followup_nonimputed_randomized %>%
@@ -4017,164 +4029,88 @@ tidy(lm_explore_mfq_sum_1_tot)
 ```
 
 ```{r plot-for-EDE-Q-interaction-ITT}
-interaction_plot <- df_randomized_imputed %>%
+df_randomized_imputed %>%
   mutate(
-    edeq_threshold = b_edeq_global >= 2.8  #clinical cutoff
-  ) %>%
+    edeq_threshold = b_edeq_global >= 2.8) %>% #2.8 is the suggested clinical cutoff
   group_by(treatment_group, edeq_threshold) %>%
   summarize(
     b_edeq_mean = mean(b_edeq_global),
     f_edeq_mean = mean(f_edeq_global),
-     b_edeq_ci95 = (sd(b_edeq_global) / sqrt(n())) * 1.96,
-    f_edeq_ci95 = (sd(f_edeq_global) / sqrt(n())) * 1.96,
-    .groups = "drop"
-  ) %>%
+    .groups = "drop") %>%
   pivot_longer(
-    cols = c(b_edeq_mean, f_edeq_mean),
-    names_to = "timepoint",
-    values_to = "value"
-  ) %>%
-  mutate(
-    ci95 = ifelse(timepoint == "b_edeq_mean", b_edeq_ci95, f_edeq_ci95)
-  ) %>%
-  ggplot(aes(x = timepoint, y = value, color = treatment_group, linetype = edeq_threshold)) +
-  geom_line(aes(group = interaction(treatment_group, edeq_threshold))) + 
-  geom_hline(yintercept = 2.8, linetype = "dotted", color = "black") +
-  geom_point(size = 2) +  
-  geom_errorbar(aes(
-      ymin = value - ci95,  
-      ymax = value + ci95),
-      width = 0.1, linetype = "solid") +
-  scale_y_continuous(
+    cols = c(b_edeq_mean, f_edeq_mean)) %>%
+  ggplot() +
+  geom_point(
+    aes(
+      x = name,
+      y = value,
+      color = treatment_group,
+      linetype = edeq_threshold)) + 
+  geom_line(  
+    aes(
+      x = name,
+      y = value,
+      group = interaction(treatment_group, edeq_threshold),
+      color = treatment_group,
+      linetype = edeq_threshold)) +
+ scale_y_continuous(
     limits = c(0, 6),          
-    breaks = seq(0, 6, by = 1)) + 
-  scale_x_discrete(
-    labels = c("b_edeq_mean" = "Pre-Intervention", "f_edeq_mean" = "3-Month Follow-Up")
-  ) +
-  labs(
+    breaks = seq(0, 6, by = 0.5)) + 
+    labs(
     x = "Timepoint",
-    y = "EDE-Q Global Score",
-    color = "Treatment Group",
-    linetype = "EDE-Q Severity" 
-  ) +
-  scale_color_manual(
-    values = c("Control" = "#F8766D", "Intervention" = "#00BFC4"),
-    labels = c("Control", "Intervention") 
-  ) +
-  scale_linetype_manual(
-    values = c("TRUE" = "solid", "FALSE" = "dashed"),  
-    labels = c("Above Threshold", "Below Threshold")
+    y = "EDE-Q Global Score"
   ) +
   theme_classic()
-interaction_plot
-
-#ggsave("~/Desktop/interaction_plot.png", plot = interaction_plot, width = 8, height = 6, units = "in", dpi = 300)
-```
-
-```{r plot-for-primary-outcomes}
-long_primary_outcomes <- df_randomized_imputed %>%
-  dplyr::select(treatment_group, b_edeq_global, f_edeq_global, 
-                b_mfq_sum, f_mfq_sum) %>%
-  pivot_longer(
-    cols = -treatment_group,
-    names_to = c("time", "measure"),
-    names_pattern = "(b|f)_(.*)",  
-    values_to = "score"
-  ) %>%
-  mutate(
-    time = case_when(
-      time == "b" ~ "Pre-Intervention",
-      time == "f" ~ "3-Month Follow-Up"
-    ),
-    measure = case_when(
-      measure == "edeq_global" ~ "Eating Disorder Symptoms",
-      measure == "mfq_sum" ~ "Depression Symptoms"
-    ),
-    time = factor(time, levels = c("Pre-Intervention", "3-Month Follow-Up"))
-  )
-
-primary_plot <- ggplot(long_primary_outcomes, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
-  stat_summary(fun = mean, geom = "line") +
-  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.1) +
-  stat_summary(fun = mean, geom = "point", size = 2) +
-  facet_wrap(~ measure, scales = "free_y") +
-  theme_classic() +
-  labs(x = "Timepoint", y = "Score", color = "Treatment Group") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  facetted_pos_scales(
-    y = list(
-      measure == "Eating Disorder Symptoms" ~ scale_y_continuous(
-        limits = c(0, 6),
-        breaks = seq(0, 6, by = 1)
-      ),
-      measure == "Depression Symptoms" ~ scale_y_continuous(
-        limits = c(0, 26),
-        breaks = seq(0, 26, by = 5)
-      )
-    ))
-primary_plot
-
-#ggsave("~/Desktop/primary_plot.png", plot = primary_plot, width = 8, height = 6, units = "in", dpi = 300)
 ```
 
 ```{r plot-for-proximal-outcomes-ITT}
-long_proximal_outcomes <- df_randomized_imputed %>%
-  dplyr::select(treatment_group, b_bhs_sum, pi_bhs_sum, f_bhs_sum,
-                b_shs_agency_sum, pi_shs_agency_sum, f_shs_agency_sum,
-                b_fas_sum, pi_fas_sum, f_fas_sum,
-                b_biss_sum, pi_biss_sum, f_biss_sum) %>% 
-  pivot_longer(
-    cols = -treatment_group,
-    names_to = c("time", "measure"),
-    names_pattern = "(b|pi|f)_(.*)",  
-    values_to = "score"
-  ) %>%
-  mutate(
-    time = case_when(
-      time == "b" ~ "Pre-Intervention",
-      time == "pi" ~ "Post-Intervention",
-      time == "f" ~ "3-Month Follow-Up"
-    ),
-    measure = case_when(
-      measure == "bhs_sum" ~ "Hopelessness",
-      measure == "shs_agency_sum" ~ "Perceived Agency",
-      measure == "fas_sum" ~ "Functionality Appreciation",
-      measure == "biss_sum" ~ "State Body Image"
-    ),
-    time = factor(time, levels = c("Pre-Intervention", "Post-Intervention", "3-Month Follow-Up"))
-  )
+df_bhs <- descriptives_itt %>%
+  dplyr::select(treatment_group, b_bhs_sum_mean, pi_bhs_sum_mean) %>%
+  rename(Pre = b_bhs_sum_mean, Post = pi_bhs_sum_mean) %>%
+  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
+  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
+plot_bhs <- ggplot(df_bhs, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Hopelessness", x = "Time", y = "Score", color = "Treatment Group") +
+  theme_classic()
+plot_bhs
 
-proximal_plot <- ggplot(long_proximal_outcomes, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
-  stat_summary(fun = mean, geom = "line") +
-  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.1) +
-  stat_summary(fun = mean, geom = "point", size = 2) +
-  facet_wrap(~ measure, scales = "free_y") +
-  theme_classic() +
-  labs(x = "Timepoint", y = "Score", color = "Treatment Group") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  facetted_pos_scales(
-    y = list(
-      measure == "Hopelessness" ~ scale_y_continuous(
-        limits = c(0, 12),
-        breaks = seq(0, 12, by = 2)
-      ),
-      measure == "Perceived Agency" ~ scale_y_continuous(
-        limits = c(3, 24),
-        breaks = seq(3, 24, by = 3)
-      ),
-      measure == "Functionality Appreciation" ~ scale_y_continuous(
-        limits = c(7, 35),
-        breaks = seq(7, 35, by = 7),
-      ),
-      measure == "State Body Image" ~ scale_y_continuous(
-        limits = c(6, 54),
-        breaks = seq(6, 54, by = 6)
-      )
-    )
-  )
-proximal_plot
+df_shs_agency <- descriptives_itt %>%
+  dplyr::select(treatment_group, b_shs_agency_sum_mean, pi_shs_agency_sum_mean) %>%
+  rename(Pre = b_shs_agency_sum_mean, Post = pi_shs_agency_sum_mean) %>%
+  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
+  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
+plot_shs_agency <- ggplot(df_shs_agency, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Agency", x = "Time", y = "Score", color = "Treatment Group") +
+  theme_classic()
+plot_shs_agency
 
-#ggsave("~/Desktop/proximal_plot.png", plot = proximal_plot, width = 8, height = 6, units = "in", dpi = 300)
+df_fas <- descriptives_itt %>%
+  dplyr::select(treatment_group, b_fas_sum_mean, pi_fas_sum_mean) %>%
+  rename(Pre = b_fas_sum_mean, Post = pi_fas_sum_mean) %>%
+  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
+  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
+plot_fas <- ggplot(df_fas, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Functionality Appreciation", x = "Time", y = "Score", color = "Treatment Group") +
+  theme_classic()
+plot_fas
+
+df_biss <- descriptives_itt %>%
+  dplyr::select(treatment_group, b_biss_sum_mean, pi_biss_sum_mean) %>%
+  rename(Pre = b_biss_sum_mean, Post = pi_biss_sum_mean) %>%
+  pivot_longer(cols = c(Pre, Post), names_to = "time", values_to = "score") %>%
+  mutate(time = factor(time, levels = c("Pre", "Post")))  # Set order of levels
+plot_biss <- ggplot(df_biss, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "State Body Satisfaction", x = "Time", y = "Score", color = "Treatment Group") +
+  theme_classic()
+plot_biss
 ```
 
 ```{r internal-consistency-ITT}
@@ -4446,4 +4382,390 @@ chisq.test(b_hunger_1_table)
 
 b_hunger_2_table <- table(imputation_ready_with_IDs$treatment_group, imputation_ready_with_IDs$b_hunger_2)
 chisq.test(b_hunger_2_table)
+```
+
+```{r plots for publication}
+interaction_plot <- df_randomized_imputed %>%
+  mutate(
+    edeq_threshold = b_edeq_global >= 2.8  #clinical cutoff
+  ) %>%
+  group_by(treatment_group, edeq_threshold) %>%
+  summarize(
+    b_edeq_mean = mean(b_edeq_global),
+    f_edeq_mean = mean(f_edeq_global),
+    b_edeq_ci95 = (sd(b_edeq_global) / sqrt(n())) * 1.96,
+    f_edeq_ci95 = (sd(f_edeq_global) / sqrt(n())) * 1.96,
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(b_edeq_mean, f_edeq_mean),
+    names_to = "timepoint",
+    values_to = "value"
+  ) %>%
+  mutate(
+    ci95 = ifelse(timepoint == "b_edeq_mean", b_edeq_ci95, f_edeq_ci95)
+  ) %>%
+  ggplot(aes(x = timepoint, y = value, color = treatment_group, linetype = edeq_threshold)) +
+  geom_line(aes(group = interaction(treatment_group, edeq_threshold))) + 
+  geom_hline(yintercept = 2.8, linetype = "dotted", color = "black") +
+  geom_point(size = 2) +  
+  geom_errorbar(aes(
+    ymin = value - ci95,  
+    ymax = value + ci95),
+    width = 0.1, linetype = "solid") +
+  scale_y_continuous(
+    limits = c(0, 6),          
+    breaks = seq(0, 6, by = 1)) + 
+  scale_x_discrete(
+    labels = c("b_edeq_mean" = "Pre-Intervention", "f_edeq_mean" = "3-Month Follow-Up")
+  ) +
+  labs(
+    x = "Timepoint",
+    y = "EDE-Q Global Score",
+    color = "Treatment Group",
+    linetype = "EDE-Q Severity" 
+  ) +
+  scale_color_manual(
+    values = c("Control" = "#F8766D", "Intervention" = "#00BFC4"),
+    labels = c("Control", "Intervention") 
+  ) +
+  scale_linetype_manual(
+    values = c("TRUE" = "solid", "FALSE" = "dashed"),  
+    labels = c("Above Threshold", "Below Threshold")
+  ) +
+  theme_classic()
+interaction_plot
+#ggsave("~/Desktop/interaction_plot.png", plot = interaction_plot, width = 8, height = 6, units = "in", dpi = 300)
+
+long_primary_outcomes <- df_randomized_imputed %>%
+  dplyr::select(treatment_group, b_edeq_global, f_edeq_global, 
+                b_mfq_sum, f_mfq_sum) %>%
+  pivot_longer(
+    cols = -treatment_group,
+    names_to = c("time", "measure"),
+    names_pattern = "(b|f)_(.*)",  
+    values_to = "score"
+  ) %>%
+  mutate(
+    time = case_when(
+      time == "b" ~ "Pre-Intervention",
+      time == "f" ~ "3-Month Follow-Up"
+    ),
+    measure = case_when(
+      measure == "edeq_global" ~ "Eating Disorder Symptoms",
+      measure == "mfq_sum" ~ "Depression Symptoms"
+    ),
+    time = factor(time, levels = c("Pre-Intervention", "3-Month Follow-Up"))
+  )
+primary_plot <- ggplot(long_primary_outcomes, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  stat_summary(fun = mean, geom = "line") +
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.1) +
+  stat_summary(fun = mean, geom = "point", size = 2) +
+  facet_wrap(~ measure, scales = "free_y") +
+  theme_classic() +
+  labs(x = "Timepoint", y = "Score", color = "Treatment Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facetted_pos_scales(
+    y = list(
+      measure == "Eating Disorder Symptoms" ~ scale_y_continuous(
+        limits = c(0, 6),
+        breaks = seq(0, 6, by = 1)
+      ),
+      measure == "Depression Symptoms" ~ scale_y_continuous(
+        limits = c(0, 26),
+        breaks = seq(0, 26, by = 5)
+      )
+    ))
+primary_plot
+#ggsave("~/Desktop/primary_plot.png", plot = primary_plot, width = 8, height = 6, units = "in", dpi = 300)
+
+long_proximal_outcomes <- df_randomized_imputed %>%
+  dplyr::select(treatment_group, b_bhs_sum, pi_bhs_sum, f_bhs_sum,
+                b_shs_agency_sum, pi_shs_agency_sum, f_shs_agency_sum,
+                b_fas_sum, pi_fas_sum, f_fas_sum,
+                b_biss_sum, pi_biss_sum, f_biss_sum) %>% 
+  pivot_longer(
+    cols = -treatment_group,
+    names_to = c("time", "measure"),
+    names_pattern = "(b|pi|f)_(.*)",  
+    values_to = "score"
+  ) %>%
+  mutate(
+    time = case_when(
+      time == "b" ~ "Pre-Intervention",
+      time == "pi" ~ "Post-Intervention",
+      time == "f" ~ "3-Month Follow-Up"
+    ),
+    measure = case_when(
+      measure == "bhs_sum" ~ "Hopelessness",
+      measure == "shs_agency_sum" ~ "Perceived Agency",
+      measure == "fas_sum" ~ "Functionality Appreciation",
+      measure == "biss_sum" ~ "State Body Satisfaction"
+    ),
+    time = factor(time, levels = c("Pre-Intervention", "Post-Intervention", "3-Month Follow-Up"))
+  )
+proximal_plot <- ggplot(long_proximal_outcomes, aes(x = time, y = score, group = treatment_group, color = treatment_group)) +
+  stat_summary(fun = mean, geom = "line") +
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.1) +
+  stat_summary(fun = mean, geom = "point", size = 2) +
+  facet_wrap(~ measure, scales = "free_y") +
+  theme_classic() +
+  labs(x = "Timepoint", y = "Score", color = "Treatment Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facetted_pos_scales(
+    y = list(
+      measure == "Hopelessness" ~ scale_y_continuous(
+        limits = c(0, 12),
+        breaks = seq(0, 12, by = 2)
+      ),
+      measure == "Perceived Agency" ~ scale_y_continuous(
+        limits = c(3, 24),
+        breaks = seq(3, 24, by = 3)
+      ),
+      measure == "Functionality Appreciation" ~ scale_y_continuous(
+        limits = c(7, 35),
+        breaks = seq(7, 35, by = 7)
+      ),
+      measure == "State Body Satisfaction" ~ scale_y_continuous(
+        limits = c(6, 54),
+        breaks = seq(6, 54, by = 6)
+      )
+    )
+  )
+proximal_plot
+#ggsave("~/Desktop/proximal_plot.png", plot = proximal_plot, width = 8, height = 6, units = "in", dpi = 300)
+```
+
+```{r additional analyses per revise and resubmit}
+#Extract cis and trans demographics columns
+gender_cols <- imputation_ready_with_IDs %>% 
+  dplyr::select(starts_with("b_dem_gender_")) %>% 
+  names()
+cis_cols   <- c("b_dem_gender_1", "b_dem_gender_2")
+trans_cols <- setdiff(gender_cols, cis_cols)
+
+#Make a new column setting if someone is cis or trans
+imputation_ready_with_IDs <- imputation_ready_with_IDs %>%
+  mutate(
+    gender_group = case_when(
+      if_any(all_of(trans_cols), ~ .x == 1) ~ "trans", #adds trans label if any trans categories selected
+      if_any(all_of(cis_cols), ~ .x == 1) ~ "cis")) #adds cis label if a cis category was selected and if no trans label was applied above
+gender_group_info <- imputation_ready_with_IDs %>%
+  dplyr::select(Participant_ID, gender_group)
+
+#Bring new gender variable into imputed data for the full randomized sample (used in ITT outcome analyses)
+df_randomized_imputed <- df_randomized_imputed %>%
+  left_join(gender_group_info, by = "Participant_ID")
+
+#And into the dataset with intervention completers (used in TOT outcome analyses)
+df_completer_intervention_imputed <- df_completer_intervention_imputed %>%
+  left_join(gender_group_info, by = "Participant_ID")
+
+#And into the dataset with PFS completers for intervention participants (used for acceptability analyses)
+df_completer_pfs_nonimputed_intervention <- df_completer_pfs_nonimputed_intervention %>%
+  left_join(gender_group_info, by = "Participant_ID")
+
+#Count trans and cis participants in each group within the full randomized sample
+df_randomized_imputed %>%
+  count(treatment_group, gender_group)
+
+#Look at interaction between gender group and treatment group (controlling for baseline scores) on primary outcomes - ITT
+lm_explore2_edeq_itt <- lm(f_edeq_global ~ b_edeq_global + gender_group + treatment_group + gender_group*treatment_group, data = df_randomized_imputed)
+summary(lm_explore2_edeq_itt)
+lm_explore2_mfq_itt <- lm(f_mfq_sum ~ b_mfq_sum + gender_group + treatment_group + gender_group*treatment_group, data = df_randomized_imputed)
+summary(lm_explore2_mfq_itt)
+summary(lm_explore2_mfq_itt)$coefficients["gender_grouptrans:treatment_groupIntervention", "Pr(>|t|)"] #original output not showing 3 decimals for some reason
+#No interaction effects
+
+#Check for baseline differences between gender groups on primary outcomes - ITT
+t.test(b_edeq_global ~ gender_group, data = df_randomized_imputed)
+t.test(b_mfq_sum ~ gender_group, data = df_randomized_imputed)
+#No significant differences
+
+#Look at interaction between gender group and treatment group (controlling for baseline scores) on primary outcomes - TOT
+lm_explore2_edeq_tot <- lm(f_edeq_global ~ b_edeq_global + gender_group + treatment_group + gender_group*treatment_group, data = df_completer_intervention_imputed)
+summary(lm_explore2_edeq_tot)
+lm_explore2_mfq_tot <- lm(f_mfq_sum ~ b_mfq_sum + gender_group + treatment_group + gender_group*treatment_group, data = df_completer_intervention_imputed)
+summary(lm_explore2_mfq_tot)
+#No interaction effects
+
+#Check for baseline differences between gender groups on primary outcomes - TOT
+t.test(b_edeq_global ~ gender_group, data = df_completer_intervention_imputed)
+t.test(b_mfq_sum ~ gender_group, data = df_completer_intervention_imputed)
+#Baseline depression scores were significantly higher for trans participants
+
+#Effect sizes for EDEQ reductions in trans and cis participants, by condition - ITT
+
+#Descriptives for trans in intervention
+edeq_stats_intervention_itt_trans <- df_randomized_imputed %>%
+  filter(gender_group == "trans", treatment_group == "Intervention") %>% 
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+#Descriptives for trans in control
+edeq_stats_control_itt_trans <- df_randomized_imputed %>%
+  filter(gender_group == "trans", treatment_group == "Control") %>% 
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+#within-person d(av) for trans in intervention
+dav_intervention_edeq_itt_trans <- d.dep.t.avg(m1 = edeq_stats_intervention_itt_trans$b_edeq_global_mean, 
+                                         m2 = edeq_stats_intervention_itt_trans$f_edeq_global_mean, 
+                                         sd1 = edeq_stats_intervention_itt_trans$b_edeq_global_sd, 
+                                         sd2 = edeq_stats_intervention_itt_trans$f_edeq_global_sd, 
+                                         n = edeq_stats_intervention_itt_trans$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+#within-person d(av) for trans in control
+dav_control_edeq_itt_trans <- d.dep.t.avg(m1 = edeq_stats_control_itt_trans$b_edeq_global_mean, 
+                                         m2 = edeq_stats_control_itt_trans$f_edeq_global_mean, 
+                                         sd1 = edeq_stats_control_itt_trans$b_edeq_global_sd, 
+                                         sd2 = edeq_stats_control_itt_trans$f_edeq_global_sd, 
+                                         n = edeq_stats_control_itt_trans$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+#Descriptives for cis in intervention
+edeq_stats_intervention_itt_cis <- df_randomized_imputed %>%
+  filter(gender_group == "cis", treatment_group == "Intervention") %>% 
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+#Descriptives for cis in control
+edeq_stats_control_itt_cis <- df_randomized_imputed %>%
+  filter(gender_group == "cis", treatment_group == "Control") %>% 
+  dplyr::select(b_edeq_global, f_edeq_global) %>%
+  mutate(edeq_global_change_pre_followup = f_edeq_global - b_edeq_global) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+#within-person d(av) for cis in intervention
+dav_intervention_edeq_itt_cis <- d.dep.t.avg(m1 = edeq_stats_intervention_itt_cis$b_edeq_global_mean, 
+                                         m2 = edeq_stats_intervention_itt_cis$f_edeq_global_mean, 
+                                         sd1 = edeq_stats_intervention_itt_cis$b_edeq_global_sd, 
+                                         sd2 = edeq_stats_intervention_itt_cis$f_edeq_global_sd, 
+                                         n = edeq_stats_intervention_itt_cis$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+#within-person d(av) for cis in control
+dav_control_edeq_itt_cis <- d.dep.t.avg(m1 = edeq_stats_control_itt_cis$b_edeq_global_mean, 
+                                         m2 = edeq_stats_control_itt_cis$f_edeq_global_mean, 
+                                         sd1 = edeq_stats_control_itt_cis$b_edeq_global_sd, 
+                                         sd2 = edeq_stats_control_itt_cis$f_edeq_global_sd, 
+                                         n = edeq_stats_control_itt_cis$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+#Effect sizes for MFQ reductions in trans and cis participants, by condition - ITT
+
+#Descriptives for trans in intervention
+mfq_stats_intervention_itt_trans <- df_randomized_imputed %>%
+  filter(gender_group == "trans", treatment_group == "Intervention") %>% 
+  dplyr::select(b_mfq_sum, f_mfq_sum) %>%
+  mutate(mfq_sum_change_pre_followup = f_mfq_sum - b_mfq_sum) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+#Descriptives for trans in control
+mfq_stats_control_itt_trans <- df_randomized_imputed %>%
+  filter(gender_group == "trans", treatment_group == "Control") %>% 
+  dplyr::select(b_mfq_sum, f_mfq_sum) %>%
+  mutate(mfq_sum_change_pre_followup = f_mfq_sum - b_mfq_sum) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+#within-person d(av) for trans in intervention
+dav_intervention_mfq_itt_trans <- d.dep.t.avg(m1 = mfq_stats_intervention_itt_trans$b_mfq_sum_mean, 
+                                         m2 = mfq_stats_intervention_itt_trans$f_mfq_sum_mean, 
+                                         sd1 = mfq_stats_intervention_itt_trans$b_mfq_sum_sd, 
+                                         sd2 = mfq_stats_intervention_itt_trans$f_mfq_sum_sd, 
+                                         n = mfq_stats_intervention_itt_trans$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+#within-person d(av) for trans in control
+dav_control_mfq_itt_trans <- d.dep.t.avg(m1 = mfq_stats_control_itt_trans$b_mfq_sum_mean, 
+                                         m2 = mfq_stats_control_itt_trans$f_mfq_sum_mean, 
+                                         sd1 = mfq_stats_control_itt_trans$b_mfq_sum_sd, 
+                                         sd2 = mfq_stats_control_itt_trans$f_mfq_sum_sd, 
+                                         n = mfq_stats_control_itt_trans$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+#Descriptives for cis in intervention
+mfq_stats_intervention_itt_cis <- df_randomized_imputed %>%
+  filter(gender_group == "cis", treatment_group == "Intervention") %>% 
+  dplyr::select(b_mfq_sum, f_mfq_sum) %>%
+  mutate(mfq_sum_change_pre_followup = f_mfq_sum - b_mfq_sum) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+#Descriptives for cis in control
+mfq_stats_control_itt_cis <- df_randomized_imputed %>%
+  filter(gender_group == "cis", treatment_group == "Control") %>% 
+  dplyr::select(b_mfq_sum, f_mfq_sum) %>%
+  mutate(mfq_sum_change_pre_followup = f_mfq_sum - b_mfq_sum) %>%
+  summarize(n = n(), 
+            across(everything(),  list(mean = mean,  sd = sd))) 
+
+#within-person d(av) for cis in intervention
+dav_intervention_mfq_itt_cis <- d.dep.t.avg(m1 = mfq_stats_intervention_itt_cis$b_mfq_sum_mean, 
+                                         m2 = mfq_stats_intervention_itt_cis$f_mfq_sum_mean, 
+                                         sd1 = mfq_stats_intervention_itt_cis$b_mfq_sum_sd, 
+                                         sd2 = mfq_stats_intervention_itt_cis$f_mfq_sum_sd, 
+                                         n = mfq_stats_intervention_itt_cis$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+#within-person d(av) for cis in control
+dav_control_mfq_itt_cis <- d.dep.t.avg(m1 = mfq_stats_control_itt_cis$b_mfq_sum_mean, 
+                                         m2 = mfq_stats_control_itt_cis$f_mfq_sum_mean, 
+                                         sd1 = mfq_stats_control_itt_cis$b_mfq_sum_sd, 
+                                         sd2 = mfq_stats_control_itt_cis$f_mfq_sum_sd, 
+                                         n = mfq_stats_control_itt_cis$n, 
+                                         a = .05) %>%
+  pluck("estimate")
+
+#Differences in PBN acceptability trans vs cis
+trans_intervention_pfs <- df_completer_pfs_nonimputed_intervention %>%
+  filter(gender_group == "trans")
+cis_intervention_pfs <- df_completer_pfs_nonimputed_intervention %>%
+  filter(gender_group == "cis")
+t.test(cis_intervention_pfs$pi_pfs_sum, trans_intervention_pfs$pi_pfs_sum)
+t.test(cis_intervention_pfs$pi_pfs_sum, trans_intervention_pfs$pi_pfs_sum)$p.value
+#No significant difference
+
+#Differences in PBN acceptability predicted by on age
+age_acceptability <- lm(pi_pfs_sum ~ b_dem_age, df_completer_pfs_nonimputed_intervention)
+summary(age_acceptability)
+#The p value is 0.6, lets see in which direction
+summary_by_age <- df_completer_pfs_nonimputed_intervention %>%
+  select(b_dem_age, pi_pfs_sum) %>%
+  group_by(b_dem_age) %>%
+  summarize(
+    n = n(),
+    mean_total = mean(pi_pfs_sum, na.rm = TRUE),
+    sd_total = sd(pi_pfs_sum, na.rm = TRUE),
+    mean_item = mean_total / 7,
+    sd_item = sd_total / 7
+  )
+summary_by_age
+ggplot(summary_by_age, aes(x = b_dem_age, y = mean_item)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean_item - sd_item, ymax = mean_item + sd_item), width = 0.2) +
+  labs(x = "Age", y = "Mean PFS Score", title = "PFS Scores by Age")
+#Older kids actually rating PBN as better (nonsignificantly) and younger kids (smaller ns) have larger SDs
+
+#Effect size of between-group differences in SSI acceptability
+cohen.d(df_completer_pfs_nonimputed_intervention$pi_pfs_sum,
+  df_completer_pfs_nonimputed_control$pi_pfs_sum,
+  paired = FALSE)
 ```
