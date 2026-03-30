@@ -4386,9 +4386,13 @@ chisq.test(b_hunger_2_table)
 
 ```{r plots for publication}
 interaction_plot <- df_randomized_imputed %>%
-  mutate(
-    edeq_threshold = b_edeq_global >= 2.8  #clinical cutoff
-  ) %>%
+ mutate(
+  edeq_threshold = factor(
+    b_edeq_global >= 2.8,
+    levels = c(FALSE, TRUE),
+    labels = c("Below Threshold", "Above Threshold")
+  )
+) %>% 
   group_by(treatment_group, edeq_threshold) %>%
   summarize(
     b_edeq_mean = mean(b_edeq_global),
@@ -4429,13 +4433,12 @@ interaction_plot <- df_randomized_imputed %>%
     values = c("Control" = "#F8766D", "Intervention" = "#00BFC4"),
     labels = c("Control", "Intervention") 
   ) +
-  scale_linetype_manual(
-    values = c("TRUE" = "solid", "FALSE" = "dashed"),  
-    labels = c("Above Threshold", "Below Threshold")
+ scale_linetype_manual(
+  values = c("Below Threshold" = "dashed", "Above Threshold" = "solid")
   ) +
   theme_classic()
 interaction_plot
-#ggsave("~/Desktop/interaction_plot.png", plot = interaction_plot, width = 8, height = 6, units = "in", dpi = 300)
+ggsave("~/Desktop/interaction_plot.png", plot = interaction_plot, width = 8, height = 6, units = "in", dpi = 300)
 
 long_primary_outcomes <- df_randomized_imputed %>%
   dplyr::select(treatment_group, b_edeq_global, f_edeq_global, 
@@ -4748,7 +4751,7 @@ age_acceptability <- lm(pi_pfs_sum ~ b_dem_age, df_completer_pfs_nonimputed_inte
 summary(age_acceptability)
 #The p value is 0.6, lets see in which direction
 summary_by_age <- df_completer_pfs_nonimputed_intervention %>%
-  select(b_dem_age, pi_pfs_sum) %>%
+  dplyr::select(b_dem_age, pi_pfs_sum) %>%
   group_by(b_dem_age) %>%
   summarize(
     n = n(),
