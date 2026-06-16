@@ -259,3 +259,16 @@ set.seed(12345) #use the same seed number each time to make the code reproducibl
 #imputed_data <- bind_cols(Participant_ID = participant_ids, imputed_data) #add back participant IDs
 #write.csv(imputed_data,file='imputed_data.csv')
 ```
+
+```{r add back in location data}
+imputed_data <- read.csv("imputed_data.csv")
+
+location_vars <- missingness_handled %>% 
+  dplyr::select(Participant_ID, IPAddress.baseline, LocationLatitude.baseline, LocationLongitude.baseline) %>% 
+  dplyr::mutate(Participant_ID = as.integer(Participant_ID))
+
+imputed_data_with_location <- imputed_data %>%
+  dplyr::left_join(location_vars, by = "Participant_ID")
+
+write.csv(imputed_data_with_location, file = "imputed_data_with_location.csv", row.names = FALSE)
+```
